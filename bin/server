@@ -1,0 +1,20 @@
+#!/bin/bash
+set -f
+
+case "$1" in
+  -h|--help|"")
+    echo "$0 should be run by emacs plugin. M-x clime should start the server for you"
+    exit 1
+  ;;
+  *)
+    PORT_FILE=$1
+  ;;
+esac
+
+export PYTHONPATH=./src/main/python:$PYTHONPATH
+
+#DIR="$( cd "$( dirname "$0" )" && pwd )"
+CMD="python2.7 ./src/main/python/server.py ${PORT_FILE}"
+echo $CMD
+exec $CMD
+
