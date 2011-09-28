@@ -23,6 +23,20 @@ class Project:
                 ["-I" + inc for inc in self.compile_include_dirs] + 
                 ["-include" + inc for inc in self.compile_include_headers])
 
+    def clang_completions_base_cmd(self, filename, line, col):
+        return (["clang"] + 
+                ["-cc1",
+                 "-fsyntax-only",
+                 "-code-completion-at=" + filename + ":" + str(line) + ":" + str(col),
+                 "-code-completion-macros",
+                 "-code-completion-patterns"
+                 ] +
+                self.compile_directives + 
+                ["-I" + inc for inc in self.compile_include_dirs] + 
+                ["-include" + inc for inc in self.compile_include_headers] + 
+                [filename]
+                )
+
     def analyzer_base_cmd(self):
         return (["scan-build", 
                 "-analyze-headers", 
@@ -39,6 +53,27 @@ class Project:
                self.compile_directives + 
                ["-I" + inc for inc in self.compile_include_dirs] + 
                ["-include" + inc for inc in self.compile_include_headers])
+
+
+    RE_COMPLETION = re.compile("^COMPLETION: (.+?) : (.+?)$")
+    def clang_completions(self, req, filename, line, col, prefix, call_id):
+        cmd = self.clang_completions_base_cmd(filename, line, col)
+        print cmd
+        sys.stdout.flush()
+        clang_output = util.run_process(" ".join(cmd))
+        candidates = []
+        for line in clang_output:
+            m = self.RE_COMPLETION.match(line)
+            if m:
+                name = m.group(1)
+                tpe = m.group(2)
+                if name.find(prefix) == 0:
+                    candidates.append(
+                        [key(":name"),m.group(1),
+                         key(":type-sig"),m.group(2),
+                         key(":is-callable"),False,
+                         ])
+        util.send_sexp(req, util.return_ok(candidates, call_id))
 
 
     def clang(self, req, cc_file, call_id):
@@ -193,4 +228,12 @@ class Project:
 
     def handle_rpc_analyze_all(self, rpc, req, call_id):
         self.clang_analyze_all(req, call_id)
+
+    def handle_rpc_completions(self, rpc, req, call_id):
+        filename = rpc[1]
+        line = rpc[2]
+        col = rpc[3]
+        prefix = rpc[4]
+        self.clang_completions(req, filename, 
+                               line, col, prefix, call_id)
 

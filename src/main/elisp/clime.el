@@ -44,6 +44,8 @@
 (require 'hideshow)
 (require 'font-lock)
 (require 'easymenu)
+(require 'auto-complete)
+(require 'clime-auto-complete)
 (require 'clime-config)
 
 (eval-when (compile)
@@ -242,6 +244,7 @@ Do not show 'Writing..' message."
 
   (if clime-mode
       (progn
+        (clime-ac-enable)
         (easy-menu-add clime-mode-menu clime-mode-map)
         (add-hook 'after-save-hook 'clime-run-after-save-hooks nil t)
         (add-hook 'clime-source-buffer-saved-hook
@@ -256,6 +259,7 @@ Do not show 'Writing..' message."
 
         (clime-refresh-all-note-overlays))
     (progn
+      (clime-ac-disable)
       (remove-hook 'after-save-hook 'clime-run-after-save-hooks t)
       (remove-hook 'clime-source-buffer-saved-hook
                    'clime-check-current-file)
@@ -2237,7 +2241,13 @@ This idiom is preferred over `lexical-let'."
 	    :end end
 	    :name (buffer-substring-no-properties start end)))))
 
-
+(defun clime-completions-at-point (&optional prefix)
+  (if (buffer-modified-p) (clime-write-buffer nil t))
+  (let ((file (buffer-file-name))
+	(col (1+ (- (point) (point-at-bol))))
+	(line (count-lines (point) (point-min))))
+    (clime-rpc-completions
+     file line col (or prefix ""))))
 
 ;; Source Formatting
 
@@ -2310,6 +2320,12 @@ with the current project's dependencies loaded. Returns a property list."
 
 (defun clime-rpc-async-analyze-file (file-name continue)
   (clime-eval-async `(swank:analyze-file ,file-name) continue))
+
+(defun clime-rpc-async-completions (file-name line col prefix continue)
+  (clime-eval-async `(swank:completions ,file-name ,line ,col ,prefix) continue))
+
+(defun clime-rpc-completions (file-name line col prefix)
+  (clime-eval `(swank:completions ,file-name ,line ,col ,prefix)))
 
 (defun clime-rpc-async-format-files (file-names continue)
   (clime-eval-async `(swank:format-source ,file-names) continue))
