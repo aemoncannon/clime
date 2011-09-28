@@ -12,10 +12,33 @@ class Project:
 
     def clang_base_cmd(self):
         return (["clang++"] + 
+                [ "-fdiagnostics-print-source-range-info",
+                  "-fdiagnostics-fixit-info",
+                  "-fdiagnostics-parseable-fixits",
+                  "-fno-caret-diagnostics",
+                  "-fsyntax-only",
+                  "-Wall"] +
                 self.compile_options + 
                 self.compile_directives + 
                 ["-I" + inc for inc in self.compile_include_dirs] + 
                 ["-include" + inc for inc in self.compile_include_headers])
+
+    def analyzer_base_cmd(self):
+        return (["scan-build", 
+                "-analyze-headers", 
+                "--keep-going"] +
+               ["clang++"] + 
+               ["--analyze", 
+                "-fdiagnostics-fixit-info", 
+                "-fdiagnostics-parseable-fixits",
+                "-fno-caret-diagnostics",
+                "-fvisibility=default",
+                "-frtti", "-fno-exceptions", 
+                "-Wall"] +
+               self.analyzer_options +
+               self.compile_directives + 
+               ["-I" + inc for inc in self.compile_include_dirs] + 
+               ["-include" + inc for inc in self.compile_include_headers])
 
 
     def clang(self, req, cc_file, call_id):
@@ -33,7 +56,7 @@ class Project:
     def clang_all(self, req, call_id):
         cmd = self.clang_base_cmd()
         for root in self.source_roots:
-            cmd.append(root + "/*")
+            cmd.append(root + "/*.cc")
 
         clang_output = util.run_process(" ".join(cmd))
 
@@ -48,6 +71,41 @@ class Project:
         util.send_sexp(
             req,
             [key(":full-check-finished"), True])
+
+
+    def clang_analyze_all(self, req, call_id):
+        cmd = self.analyzer_base_cmd()
+
+        for root in self.source_roots:
+            cmd.append(root + "/*.cc")
+
+        clang_output = util.run_process(" ".join(cmd))
+
+        util.send_sexp(
+            req,
+            [key(":clear-all-notes"), True])
+
+        self.receive_syntax_checker_output(req, clang_output)
+
+        util.send_sexp(req, util.return_ok(True, call_id))
+
+        util.send_sexp(
+            req,
+            [key(":full-check-finished"), True])
+
+
+    def clang_analyze_file(self, req, filename, call_id):
+        cmd = self.analyzer_base_cmd() + [filename]
+
+        clang_output = util.run_process(" ".join(cmd))
+
+        util.send_sexp(
+            req,
+            [key(":clear-all-notes"), True])
+
+        self.receive_syntax_checker_output(req, clang_output)
+
+        util.send_sexp(req, util.return_ok(True, call_id))
 
 
 
@@ -112,6 +170,7 @@ class Project:
         self.compile_directives = conf[':compile-directives']
         self.compile_include_dirs = conf[':compile-include-dirs']
         self.compile_include_headers = conf[':compile-include-headers']
+        self.analyzer_options = conf[':analyzer-options']
 
         util.send_sexp(req,
                        util.return_ok([
@@ -127,4 +186,11 @@ class Project:
 
     def handle_rpc_check_all(self, rpc, req, call_id):
         self.clang_all(req, call_id)
+
+    def handle_rpc_analyze_file(self, rpc, req, call_id):
+        filename = rpc[1]
+        self.clang_analyze_file(req, filename, call_id)
+
+    def handle_rpc_analyze_all(self, rpc, req, call_id):
+        self.clang_analyze_all(req, call_id)
 

@@ -204,6 +204,9 @@ Do not show 'Writing..' message."
     (let ((prefix-map (make-sparse-keymap)))
 
       (define-key prefix-map (kbd "C-v e") 'clime-show-all-errors-and-warnings)
+      (define-key prefix-map (kbd "C-v a") 'clime-check-all)
+      (define-key prefix-map (kbd "C-v z") 'clime-analyze-all)
+      (define-key prefix-map (kbd "C-v s") 'clime-analyze-current-file)
 
       (define-key map clime-mode-key-prefix prefix-map)
 
@@ -2180,6 +2183,15 @@ This idiom is preferred over `lexical-let'."
   (clime-rpc-async-check-file
    buffer-file-name 'identity))
 
+(defun clime-analyze-current-file ()
+  "Send a request for re-check of current file to all CLIME servers
+ managing projects that contains the current file. File is saved
+ first if it has unwritten modifications."
+  (interactive)
+  (when (buffer-modified-p) (clime-write-buffer nil t))
+  (clime-rpc-async-analyze-file
+   buffer-file-name 'identity))
+
 (defun clime-check-all ()
   "Send a request for re-check of whole project to the CLIME server.
    Current file is saved if it has unwritten modifications."
@@ -2188,6 +2200,15 @@ This idiom is preferred over `lexical-let'."
   (if (buffer-modified-p) (clime-write-buffer nil t))
   (setf (clime-awaiting-full-check (clime-connection)) t)
   (clime-rpc-async-check-all 'identity))
+
+(defun clime-analyze-all ()
+  "Send a request for re-check of whole project to the CLIME server.
+   Current file is saved if it has unwritten modifications."
+  (interactive)
+  (message "Analyzing entire project...")
+  (if (buffer-modified-p) (clime-write-buffer nil t))
+  (setf (clime-awaiting-full-check (clime-connection)) t)
+  (clime-rpc-async-analyze-all 'identity))
 
 
 (defun clime-show-all-errors-and-warnings ()
@@ -2283,6 +2304,12 @@ with the current project's dependencies loaded. Returns a property list."
 
 (defun clime-rpc-async-check-all (continue)
   (clime-eval-async `(swank:check-all) continue))
+
+(defun clime-rpc-async-analyze-all (continue)
+  (clime-eval-async `(swank:analyze-all) continue))
+
+(defun clime-rpc-async-analyze-file (file-name continue)
+  (clime-eval-async `(swank:analyze-file ,file-name) continue))
 
 (defun clime-rpc-async-format-files (file-names continue)
   (clime-eval-async `(swank:format-source ,file-names) continue))

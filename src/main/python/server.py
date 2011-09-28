@@ -44,6 +44,10 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
                 proj.handle_rpc_check_file(req, self.request, call_id)
             elif rpc_tag == key("swank:check-all"):
                 proj.handle_rpc_check_all(req, self.request, call_id)
+            elif rpc_tag == key("swank:analyze-all"):
+                proj.handle_rpc_analyze_all(req, self.request, call_id)
+            elif rpc_tag == key("swank:analyze-file"):
+                proj.handle_rpc_analyze_file(req, self.request, call_id)
             else:
                 print "Unrecognized rpc " + str(rpc_tag)
                 util.send_sexp(self.request, 
