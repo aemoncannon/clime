@@ -82,7 +82,7 @@
   :type 'boolean
   :group 'clime-ui)
 
-(defcustom clime-graphical-tooltips nil
+(defcustom clime-graphical-tooltips t
   "If non-nil, show graphical bubbles for tooltips."
   :type 'boolean
   :group 'clime-ui)
@@ -368,6 +368,9 @@ Do not show 'Writing..' message."
 		       "[CLIME: "
 		       (or (plist-get (clime-config conn) :project-name)
 			   "Connected")
+		       " : "
+		       (format "(%s/%s)" (clime-error-count conn) (clime-warning-count conn))
+		       " : "
 		       (let ((status (clime-modeline-state-string conn)))
 			 (cond (status (concat " (" status ")"))
 			       (t "")))
@@ -1314,6 +1317,12 @@ This is automatically synchronized from Lisp.")
 (clime-def-connection-var clime-compiler-notes nil
   "Warnings, Errors, and other notes produced by the analyzer.")
 
+(clime-def-connection-var clime-error-count 0
+  "Current number of errors.")
+
+(clime-def-connection-var clime-warning-count 0
+  "Current number of warnings.")
+
 (clime-def-connection-var clime-awaiting-full-check nil
   "Should we show the errors and warnings report on next full-check event?")
 
@@ -1768,8 +1777,12 @@ This idiom is preferred over `lexical-let'."
 	  ((:clear-all-notes result)
 	   (clime-clear-notes))
 
-	  ((:clear-file-notes result)
-	   (clime-clear-file-notes))
+	  ((:clear-file-notes files)
+	   (let ((file-set (make-hash-table :test 'equal)))
+	     (dolist (file files)
+	       (puthash (file-truename file) t file-set))
+	     (clime-clear-file-notes file-set)))
+	   
 
 	  ((:channel-send id msg)
 	   (clime-channel-send (or (clime-find-channel id)
@@ -1854,12 +1867,45 @@ This idiom is preferred over `lexical-let'."
 	    (append (clime-compiler-notes (clime-connection))
 	     notes))
     (clime-make-note-overlays notes)
+    (clime-update-note-counts)
     ))
+
+
+(defun clime-update-note-counts ()
+  (let* ((con (clime-connection))
+	 (notes (clime-compiler-notes con))
+	 (error-count 0)
+	 (warn-count 0))
+    (dolist (note notes)
+      (let ((severity (plist-get note :severity)))
+	(case severity
+	  (error (incf error-count))
+	  (warn (incf warn-count))
+	  (otherwise t)
+	  )))
+    (setf (clime-error-count con) error-count)  
+    (setf (clime-warning-count con) warn-count)))
 
 
 (defun clime-clear-notes ()
   (setf (clime-compiler-notes (clime-connection)) nil)
-  (clime-clear-note-overlays))
+  (clime-clear-note-overlays)
+  (clime-update-note-counts))
+
+
+(defun clime-clear-file-notes (file-set)
+    (let* ((con (clime-connection))
+	   (notes (clime-compiler-notes con))
+	   (error-count 0)
+	   (warn-count 0)
+	   (revised '()))
+      (dolist (note notes)
+	(let ((f (plist-get note :file)))
+	  (when (not (gethash (file-truename f) file-set))
+	    (setq revised (cons note revised)))))
+      (setf (clime-compiler-notes con) (reverse revised)))
+    (clime-clear-note-overlays file-set)
+    (clime-update-note-counts))
 
 
 (defun clime-make-overlay-at (file line col msg face)
@@ -1952,13 +1998,17 @@ This idiom is preferred over `lexical-let'."
      ovs)
     ))
 
-(defun clime-clear-note-overlays (&optional lang)
+(defun clime-clear-note-overlays (&optional file-set)
   "Delete note overlays language. If lang is nil, delete all
  overlays."
   (let ((revised '()))
     (dolist (ov clime-note-overlays)
-      (if (or (null lang)
-	      (equal lang (overlay-get ov 'lang)))
+      (if (or (null file-set)
+	      (gethash
+	       (file-truename 
+		(buffer-file-name (overlay-buffer ov)))
+	       file-set
+	       ))
 	  (delete-overlay ov)
 	(setq revised (cons ov revised))))
     (setq clime-note-overlays revised)))
@@ -2060,7 +2110,7 @@ This idiom is preferred over `lexical-let'."
 
 (defun clime-files-equal-p (f1 f2)
   "Return t if file-names refer to same file."
-  (equal (expand-file-name f1) (expand-file-name f2)))
+  (equal (file-truename f1) (file-truename f2)))
 
 
 (defun clime-goto-source-location (pos &optional where)

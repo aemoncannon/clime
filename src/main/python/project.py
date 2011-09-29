@@ -6,7 +6,8 @@ from sexp import sym
 import util
 import subprocess
 import re
-
+import depgraph
+from glob import glob
 
 class Project:
 
@@ -76,17 +77,43 @@ class Project:
         util.send_sexp(req, util.return_ok(candidates, call_id))
 
 
-    def clang(self, req, cc_file, call_id):
-        cmd = self.clang_base_cmd() + [cc_file]
-        print cmd
+    def __nuke_all_precompiled_headers(self):
+        for r in self.source_roots:
+            for f in glob (r + '*.h.gch'):
+                os.unlink (f)
+
+
+    def clang(self, req, filename, call_id):
+        cmd = None
         sys.stdout.flush()
+
+        if util.is_unit(filename):
+            cmd = self.clang_base_cmd() + [filename]
+            util.send_sexp(
+                req, [key(":clear-file-notes"), [filename]])
+        elif util.is_header(filename):
+            self.__nuke_all_precompiled_headers()
+            util.send_sexp(
+                req,
+                [key(":clear-all-notes"), True])
+
+            dg = depgraph.DepGraph(self.source_roots, self.compile_include_dirs)
+            invalidated = dg.files_including(filename)
+            units = [f for f in invalidated if util.is_unit(f)]
+
+#            print "Clearing errors in " + str(len(units)) + " files."
+#            util.send_sexp(
+#                    req, [key(":clear-file-notes"), list(invalidated)])
+#
+            print "Recompiling " + str(len(units)) + " dependent units."
+            cmd = self.clang_base_cmd() + units
+            sys.stdout.flush()
+        else:
+            assert False, "WTF. Not header OR source unit?"
+
         clang_output = util.run_process(" ".join(cmd))
-        util.send_sexp(
-            req,
-            [key(":clear-all-notes"), True])
         self.receive_syntax_checker_output(req, clang_output)
         util.send_sexp(req, util.return_ok(True, call_id))
-
 
     def clang_all(self, req, call_id):
         cmd = self.clang_base_cmd()

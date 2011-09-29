@@ -1,6 +1,7 @@
 import sys
 import sexp
 import subprocess
+import os
 from sexp import key
 
 def len_header(num):
@@ -11,6 +12,14 @@ def len_header(num):
 
 def return_ok(val, call_id):
     return [key(":return"), [ key(":ok"), val ], call_id]
+
+def is_unit(filename):
+    base,ext = os.path.splitext(filename)
+    return ext == ".c" or ext == ".cc"
+
+def is_header(filename):
+    base,ext = os.path.splitext(filename)
+    return ext == ".h"
 
 def send_sexp(req, response_sexp):
     response_str = sexp.to_string(response_sexp)
