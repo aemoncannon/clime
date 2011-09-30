@@ -280,7 +280,7 @@ class Project:
 
     def handle_rpc_init_project(self, rpc, req, call_id):
 
-        conf = util.sexp_to_key_map(rpc[1])
+        conf = util.sexp_to_key_map(rpc[1])d
 
         self.root_dir = os.path.abspath(conf[':root-dir'])
         self.source_roots = [os.path.join(self.root_dir,r) for r in conf[':source-roots']]
