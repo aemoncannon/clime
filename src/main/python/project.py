@@ -39,6 +39,7 @@ class Project:
                  "-code-completion-macros",
                  "-code-completion-patterns"
                  ] +
+                self.completion_options + 
                 self.compile_directives + 
                 ["-I" + inc for inc in self.compile_include_dirs] + 
                 ["-include" + inc for inc in self.compile_include_headers] + 
@@ -71,6 +72,7 @@ class Project:
         clang_output = util.run_process(" ".join(cmd))
         candidates = []
         for line in clang_output:
+            print line
             m = self.RE_COMPLETION.match(line)
             if m:
                 name = m.group(1)
@@ -239,6 +241,7 @@ class Project:
         self.compile_include_dirs = conf[':compile-include-dirs'] or []
         self.compile_include_headers = conf[':compile-include-headers'] or []
         self.analyzer_options = conf[':analyzer-options'] or []
+        self.completion_options = conf[':completion-options'] or []
 
         util.send_sexp(req,
                        util.return_ok([
