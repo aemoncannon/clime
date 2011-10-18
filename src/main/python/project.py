@@ -11,9 +11,16 @@ from glob import glob
 
 class Project:
 
+    def all_units(self):
+        for root in self.source_roots:
+            for s in util.find_all_files_recursively(root, "*.cc"):
+                yield s
+            for s in util.find_all_files_recursively(root, "*.cpp"):
+                yield s
+
     def clang_base_cmd(self):
         return (["clang++"] + 
-                [ "-fdiagnostics-print-source-range-info",
+                [ #"-fdiagnostics-print-source-range-info",
                   "-fdiagnostics-fixit-info",
                   "-fdiagnostics-parseable-fixits",
                   "-fno-caret-diagnostics",
@@ -117,8 +124,8 @@ class Project:
 
     def clang_all(self, req, call_id):
         cmd = self.clang_base_cmd()
-        for root in self.source_roots:
-            cmd.append(root + "/*.cc")
+        for s in self.all_units():
+            cmd.append(s)
 
         clang_output = util.run_process(" ".join(cmd))
 
@@ -137,9 +144,8 @@ class Project:
 
     def clang_analyze_all(self, req, call_id):
         cmd = self.analyzer_base_cmd()
-
-        for root in self.source_roots:
-            cmd.append(root + "/*.cc")
+        for s in self.all_units():
+            cmd.append(s)
 
         clang_output = util.run_process(" ".join(cmd))
 
@@ -225,14 +231,14 @@ class Project:
         conf = util.sexp_to_key_map(rpc[1])
 
         self.root_dir = os.path.abspath(conf[':root-dir'])
-        self.source_roots = [os.path.join(self.root_dir,r) for r in conf[':source-roots']]
+        self.source_roots = [os.path.join(self.root_dir,r) for r in (conf[':source-roots'] or [])]
         self.project_name = "Unnamed Project"
 
-        self.compile_options = conf[':compile-options']
-        self.compile_directives = conf[':compile-directives']
-        self.compile_include_dirs = conf[':compile-include-dirs']
-        self.compile_include_headers = conf[':compile-include-headers']
-        self.analyzer_options = conf[':analyzer-options']
+        self.compile_options = conf[':compile-options'] or []
+        self.compile_directives = conf[':compile-directives'] or []
+        self.compile_include_dirs = conf[':compile-include-dirs'] or []
+        self.compile_include_headers = conf[':compile-include-headers'] or []
+        self.analyzer_options = conf[':analyzer-options'] or []
 
         util.send_sexp(req,
                        util.return_ok([
