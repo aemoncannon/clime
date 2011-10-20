@@ -3,6 +3,7 @@ import sexp
 import subprocess
 import os
 from sexp import key
+import fnmatch
 
 def len_header(num):
     s = hex(num).lstrip("0x")
@@ -15,11 +16,16 @@ def return_ok(val, call_id):
 
 def is_unit(filename):
     base,ext = os.path.splitext(filename)
-    return ext == ".c" or ext == ".cc"
+    return ext == ".c" or ext == ".cc" or ext == ".cpp"
 
 def is_header(filename):
     base,ext = os.path.splitext(filename)
     return ext == ".h"
+
+def find_all_files_recursively(directory, glob):
+    for root, dirnames, filenames in os.walk(directory):
+        for filename in fnmatch.filter(filenames, glob):
+            yield os.path.join(root, filename)
 
 def send_sexp(req, response_sexp):
     response_str = sexp.to_string(response_sexp)
@@ -33,7 +39,8 @@ def send_sexp(req, response_sexp):
 def run_process(cmd_str):
     print cmd_str
     sys.stdout.flush()
-    p = subprocess.Popen(cmd_str, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, shell=True)
+    p = subprocess.Popen(cmd_str, stdout=subprocess.PIPE, 
+                         stderr=subprocess.STDOUT, shell=True)
     while(True):
         retcode = p.poll() #returns None while subprocess is running
         line = p.stdout.readline()

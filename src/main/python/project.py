@@ -8,6 +8,8 @@ import subprocess
 import re
 import depgraph
 from glob import glob
+import model
+
 
 
 class Job:
@@ -16,11 +18,11 @@ class Job:
     self.req = req
     self.call_id = call_id
 
-    def run():
-      self.running = True
+  def run(self):
+    self.running = True
 
-    def cancel():
-      self.canceled = True
+  def cancel(self):
+    self.canceled = True
 
 
 class ClangJob(Job):
@@ -34,14 +36,21 @@ class ClangJob(Job):
       for f in glob (r + '*.h.gch'):
         os.unlink (f)
 
+  def all_units(self):
+    for root in self.config['source_roots']:
+      for s in util.find_all_files_recursively(root, "*.cc"):
+        yield s
+      for s in util.find_all_files_recursively(root, "*.cpp"):
+        yield s
+
   def clang_base_cmd(self):
     return (["clang++"] + 
-            [ "-fdiagnostics-print-source-range-info",
-              "-fdiagnostics-fixit-info",
-              "-fdiagnostics-parseable-fixits",
-              "-fno-caret-diagnostics",
-              "-fsyntax-only",
-              "-Wall"] +
+            [ #"-fdiagnostics-print-source-range-info",
+            "-fdiagnostics-fixit-info",
+            "-fdiagnostics-parseable-fixits",
+            "-fno-caret-diagnostics",
+            "-fsyntax-only",
+            "-Wall"] +
             self.config['compile_options'] + 
             self.config['compile_directives'] + 
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
@@ -55,6 +64,7 @@ class ClangJob(Job):
              "-code-completion-macros",
              "-code-completion-patterns"
              ] +
+            self.config['completion_options'] + 
             self.config['compile_directives'] + 
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
             ["-include" + inc for inc in self.config['compile_include_headers']] + 
@@ -124,17 +134,27 @@ class ClangCompletionsJob(ClangJob):
     clang_output = util.run_process(" ".join(cmd))
     candidates = []
     for line in clang_output:
+      print line
       m = self.RE_COMPLETION.match(line)
       if m:
         name = m.group(1)
         tpe = m.group(2)
         if name.find(self.prefix) == 0:
-          candidates.append(
+          member = model.make_member(tpe)
+          if member:
+            candidates.append(
+              [key(":name"),member.name,
+               key(":type-sig"),str(member),
+               key(":is-callable"),member.is_callable(),
+               key(":args-placeholder"),member.args_placeholder()
+               ])
+          else:
+            candidates.append(
               [key(":name"),m.group(1),
                key(":type-sig"),m.group(2),
-               key(":is-callable"),False,
+               key(":args-placeholder"),"",
                ])
-        util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
+    util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
 
 
 class ClangCompileFileJob(ClangJob):
@@ -167,10 +187,11 @@ class ClangCompileFileJob(ClangJob):
       sys.stdout.flush()
     else:
       assert False, "WTF. Not header OR source unit?"
+      
+    clang_output = util.run_process(" ".join(cmd))
+    self.receive_syntax_checker_output(self.req, clang_output)
 
-      clang_output = util.run_process(" ".join(cmd))
-      self.receive_syntax_checker_output(self.req, clang_output)
-      util.send_sexp(self.req, util.return_ok(True, self.call_id))
+    util.send_sexp(self.req, util.return_ok(True, self.call_id))
 
 
 class ClangCompileAllJob(ClangJob):
@@ -180,24 +201,24 @@ class ClangCompileAllJob(ClangJob):
 
   def run(self):
     cmd = self.clang_base_cmd()
-    for root in self.config['source_roots']:
-      cmd.append(root + "/*.cc")
-
-      clang_output = util.run_process(" ".join(cmd))
-
-      util.send_sexp(
-          req,
-          [key(":clear-all-notes"), True])
-
-      self.receive_syntax_checker_output(self.req, clang_output)
-
-      util.send_sexp(self.req, util.return_ok(True, call_id))
-
-      util.send_sexp(
-          self.req,
-          [key(":full-check-finished"), True])
-
+    for s in self.all_units():
+      cmd.append(s)
       
+    clang_output = util.run_process(" ".join(cmd))
+
+    util.send_sexp(
+        self.req,
+        [key(":clear-all-notes"), True])
+
+    self.receive_syntax_checker_output(self.req, clang_output)
+
+    util.send_sexp(self.req, util.return_ok(True, self.call_id))
+
+    util.send_sexp(
+        self.req,
+        [key(":full-check-finished"), True])
+
+
 class Project:
 
   def __init__(self):
@@ -209,7 +230,6 @@ class Project:
       self.jobs = []
 
   def start_job(self, job):
-    assert len(self.jobs) == 0 # by definition, since server is synchronous
     self.cancel_outstanding_jobs()
     self.jobs.append(job)
     job.run()
@@ -222,7 +242,8 @@ class Project:
         'compile_directives': self.compile_directives,
         'compile_include_headers': self.compile_include_headers,
         'compile_include_dirs': self.compile_include_dirs,
-        'analyzer_options': self.analyzer_options
+        'analyzer_options': self.analyzer_options,
+        'completion_options': self.completion_options
         }
 
 #    def clang_analyze_all(self, req, call_id):
@@ -284,13 +305,14 @@ class Project:
   def handle_rpc_init_project(self, rpc, req, call_id):
     conf = util.sexp_to_key_map(rpc[1])
     self.root_dir = os.path.abspath(conf[':root-dir'])
-    self.source_roots = [os.path.join(self.root_dir,r) for r in conf[':source-roots']]
-    self.project_name = "Unnamed Project"
-    self.compile_options = conf[':compile-options']
-    self.compile_directives = conf[':compile-directives']
-    self.compile_include_dirs = conf[':compile-include-dirs']
-    self.compile_include_headers = conf[':compile-include-headers']
-    self.analyzer_options = conf[':analyzer-options']
+    self.source_roots = [os.path.join(self.root_dir,r) for r in (conf[':source-roots'] or [])]
+    self.project_name = "Unnamed Project" 
+    self.compile_options = conf[':compile-options'] or []
+    self.compile_directives = conf[':compile-directives'] or []
+    self.compile_include_dirs = conf[':compile-include-dirs'] or []
+    self.compile_include_headers = conf[':compile-include-headers'] or []
+    self.analyzer_options = conf[':analyzer-options'] or []
+    self.completion_options = conf[':completion-options'] or []
     util.send_sexp(req,
                    util.return_ok([
                        key(":project-name"), self.project_name,
@@ -317,6 +339,5 @@ class Project:
     line = rpc[2]
     col = rpc[3]
     prefix = rpc[4]
-    self.start_job(ClangCompletionsJob(req, call_id, config, filename, line, col, prefix))
-
+    self.start_job(ClangCompletionsJob(req, call_id, self.compile_config(), filename, line, col, prefix))
 

@@ -42,7 +42,7 @@ target of the call. Point should be be over last character of call target."
 
     (mapcar (lambda (m)
 	      (let* ((type-sig (plist-get m :type-sig))
-		     (type-id (plist-get m :type-id))
+		     (args-placeholder (plist-get m :args-placeholder))
 		     (is-callable (plist-get m :is-callable))
 		     (name (plist-get m :name))
 		     (candidate name))
@@ -50,7 +50,7 @@ target of the call. Point should be be over last character of call target."
 		(propertize candidate
 			    'symbol-name name
 			    'type-sig type-sig
-			    'type-id type-id
+			    'args-placeholder args-placeholder
 			    'is-callable is-callable
 			    'summary (clime-ac-trunc-summary type-sig)
 			    )))
@@ -124,46 +124,13 @@ be used later to give contextual help when entering arguments."
 
   (let* ((candidate candidate) ;;Grab from dynamic environment..
 	 (name candidate)
-	 (type-id (get-text-property 0 'type-id candidate)))
-
-    (let ((name-start-point (- (point) (length name))))
-
-      ;; If this member is callable, use the type-id to lookup call completion
-      ;; information to show parameter hints.
-      (when (get-text-property 0 'is-callable candidate)
-
-	(let* ((call-info (clime-rpc-get-call-completion type-id))
-	       (param-sections (clime-type-param-sections call-info)))
-	  (when (and call-info param-sections)
-
-	    ;; Insert space or parens depending on the nature of the
-	    ;; call
-	    (save-excursion
-	      (if (and (= 1 (length (car param-sections)))
-		       (null (string-match "[A-z]" name)))
-		  ;; Probably an operator..
-		  (insert " ")
-		;; Probably a normal method call
-		(insert "()" )))
-
-	    (if (car param-sections)
-		(progn
-		  ;; Save param info as a text properties of the member name..
-		  (add-text-properties name-start-point
-				       (+ name-start-point (length name))
-				       (list 'call-info call-info
-					     ))
-
-		  ;; Setup hook function to show param help later..
-		  (add-hook 'post-command-hook
-			    'clime-ac-update-param-help nil t)
-		  ;; This command should trigger help hook..
-		  (forward-char))
-
-	      ;; Otherwise, skip to the end
-	      (forward-char 2))
-
-	    ))))))
+	 (arg-str (get-text-property 0 'args-placeholder name))
+	 (is-callable (get-text-property 0 'is-callable name)))
+    (when is-callable
+      (save-excursion
+	(insert (format "(%s)" arg-str)))
+      (forward-char 1)
+      )))
 
 
 (defun clime-ac-get-active-param-info ()
