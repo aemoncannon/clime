@@ -46,12 +46,12 @@ class Param:
 def parse_params(str):
   result = []
   parts = str.split(", ")
-  param_re = re.compile("<#(.+? (?:&|\\*)?)([A-z]+)#>")
+  param_re = re.compile("<#(.+? (?:&|\\*)?)([A-z]+)?#>")
   for p in parts:
     m = param_re.match(p)
     if m:
       tpe = m.group(1)
-      name = m.group(2)
+      name = m.group(2) or "x"
       result.append(Param(name, Type(tpe)))
   return result
 
@@ -104,21 +104,51 @@ class Function:
     return True
 
 
+class Constructor:
+  def __init__(self, name, params):
+    self.name = name
+    self.params = params
+
+  def to_sexp_list(self, ):
+    return [key(":name"),self.name,
+            key(":params"),[p.to_sexp_list for p in self.params]]
+
+  def __repr__(self):
+    return (self.name + 
+            "(" + ", ".join([str(p) for p in self.params]) + ")")
+
+  def args_placeholder(self):
+    return ", ".join([str(p) for p in self.params])
+
+  def is_callable(self):
+    return True
+
+
+
 
 # Parsing lines of the form:
 # [#void#]insertRows(<#int row#>, <#const QList<QStandardItem *> &items#>)
 # [#void#]insertRows(<#int row#>, <#int count#>)
 # [#bool#]isDragEnabled()[# const#]
 def make_member(completion_str):
-  method_re = re.compile("\\[#([^\\]]+)#\\]([^ \\(]+)(\\(((?:<#[^\\]]+#>(?:, )?)*)\\))?(\\[# const#\\])?")
+  
+  # For now, let's just ignore optional args.
+  completion_str = completion_str.replace("{#", "")
+  completion_str = completion_str.replace("#}", "")
+
+  method_re = re.compile("(?:\\[#([^\\]]+)#\\])?(?:\\[#([^\\]]+)#\\])?([^ \\(]+)(\\(((?:<#[^\\]]+#>(?:, )?)*)\\))?(\\[# const#\\])?")
   m = method_re.match(completion_str)
   if m:
-    type = Type(m.group(1))
-    name = m.group(2)
-    const = m.group(5)
-    if m.group(3):
-      params = parse_params(m.group(4))
+    type = Type(m.group(1)) if m.group(1) else None
+    scope = m.group(2)
+    name = m.group(3)
+    const = m.group(6)
+    if type and m.group(4):
+      params = parse_params(m.group(5))
       return Function(type, name, params, const)
+    elif not type and m.group(4):
+      params = parse_params(m.group(5))
+      return Constructor(name, params)
     else:
       return Field(type, name)
   else:
@@ -126,14 +156,32 @@ def make_member(completion_str):
 
 
 if __name__ == "__main__":
-  print str(make_member("[#void#]insertRows(<#int row#>, <#const QList<QStandardItem *> &items#>)"))
-  print str(make_member("[#void#]insertRows(<#int row#>, <#int count#>)"))
-  print str(make_member("[#bool#]isDragEnabled()[# const#]"))
-  print str(make_member("[#QBrush#]background()[# const#]"))
-  print str(make_member("[#QScopedPointer<QStandardItemPrivate>#]d_ptr"))
-  print str(make_member("[#QStandardItem &#]operator=(<#const QStandardItem &other#>)"))
-  print str(make_member("[#bool#]operator<(<#const QStandardItem &other#>)[# const#]"))
-  print str(make_member("[#QStandardItem *#]child(<#int row#>{#, <#int column#>#})[# const#]"))
+  assert (str(make_member("[#void#]insertRows(<#int row#>, <#const QList<QStandardItem *> &items#>)"))
+          == "void insertRows(int row, const QList<QStandardItem *>& items)")
+  assert (str(make_member("[#void#]insertRows(<#int row#>, <#int count#>)"))
+          == "void insertRows(int row, int count)")
+  assert (str(make_member("[#bool#]isDragEnabled()[# const#]"))
+          == "bool isDragEnabled() const")
+  assert (str(make_member("[#QBrush#]background()[# const#]"))
+          == "QBrush background() const")
+  assert (str(make_member("[#QScopedPointer<QStandardItemPrivate>#]d_ptr"))
+          == "QScopedPointer<QStandardItemPrivate> d_ptr")
+  assert (str(make_member("[#QStandardItem &#]operator=(<#const QStandardItem &other#>)"))
+          == "QStandardItem& operator=(const QStandardItem& other)")
+  assert (str(make_member("[#bool#]operator<(<#const QStandardItem &other#>)[# const#]"))
+          == "bool operator<(const QStandardItem& other) const")
+  assert (str(make_member("[#QStandardItem *#]child(<#int row#>{#, <#int column#>#})[# const#]"))
+          == "QStandardItem* child(int row, int column) const")
+  assert (str(make_member("ApeOutlineModel(<#const long long customerId#>{#, <#QObject *parent#>#})"))
+          == "ApeOutlineModel(const long long customerId, QObject* parent)")
+  assert (str(make_member("[#void#]selectionChangedSlot(<#const QItemSelection &#>, <#const QItemSelection &#>)"))
+          == "void selectionChangedSlot(const QItemSelection& x, const QItemSelection& x)")
+
+
+
+
+
+
 
 
 

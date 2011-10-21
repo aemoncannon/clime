@@ -32,6 +32,24 @@ target of the call. Point should be be over last character of call target."
       (delete-region (point) p)
       text)))
 
+(defun clime-make-candidates (members)
+  (mapcar (lambda (m)
+	    (let* ((type-sig (plist-get m :type-sig))
+		   (args-placeholder (plist-get m :args-placeholder))
+		   (is-callable (plist-get m :is-callable))
+		   (name (plist-get m :name))
+		   (candidate name))
+	      ;; Save the type for later display
+	      (propertize candidate
+			  'symbol-name name
+			  'type-sig type-sig
+			  'args-placeholder args-placeholder
+			  'is-callable is-callable
+			  'summary (clime-ac-trunc-summary type-sig)
+			  )))
+	  members))
+
+
 (defun clime-ac-member-candidates (prefix)
   "Return candidate list."
   (let ((members
@@ -39,24 +57,18 @@ target of the call. Point should be be over last character of call target."
 	  (clime-ac-delete-text-back-to-call-target)
 	  (clime-write-buffer)
 	  (clime-completions-at-point prefix))))
-
-    (mapcar (lambda (m)
-	      (let* ((type-sig (plist-get m :type-sig))
-		     (args-placeholder (plist-get m :args-placeholder))
-		     (is-callable (plist-get m :is-callable))
-		     (name (plist-get m :name))
-		     (candidate name))
-		;; Save the type for later display
-		(propertize candidate
-			    'symbol-name name
-			    'type-sig type-sig
-			    'args-placeholder args-placeholder
-			    'is-callable is-callable
-			    'summary (clime-ac-trunc-summary type-sig)
-			    )))
-	    members)
+    (clime-make-candidates members)
     ))
 
+
+(defun clime-ac-name-candidates (prefix)
+  "Return candidate list."
+  (let ((members
+	  (clime-ac-with-buffer-copy
+	   (clime-write-buffer)
+	   (clime-completions-at-point prefix))))
+    (clime-make-candidates members)
+    ))
 
 (defmacro* clime-ac-with-buffer-copy (&rest body)
   "Create a duplicate of the current buffer, copying all contents.
@@ -110,6 +122,29 @@ changes will be forgotten."
    Return nil if we are not currently looking at a member access."
   (let ((point (re-search-backward "\\(\\.\\|->\\|::\\)\\([A-z_\\-]*\\)?" (point-at-bol) t)))
     (if point (+ (length (match-string 1)) point))))
+
+(defvar clime-ac-name-following-keyword-re
+  (concat
+   "\\(?:\\W\\|\\s-\\)\\(?:else\\|case\\|new\\|with\\|extends\\|yield\\)"
+   "\\s-+\\(\\w*\\)"))
+
+(defvar clime-ac-name-following-syntax-re
+  (concat
+   "[!=(\\[,;}{\n+*/\\^&~%-]"
+   "\\s-*\\(\\w*\\)"))
+
+(defun clime-ac-name-prefix ()
+  "Starting at current point - find the point of completion for a symbol.
+ Return nil if we're looking at a context where symbol completion is
+ inappropriate."
+  (let ((left-bound (clime-pt-at-end-of-prev-line)))
+    (when (or (looking-back  clime-ac-name-following-keyword-re left-bound)
+	      (looking-back clime-ac-name-following-syntax-re left-bound))
+      (let ((point (- (point) (length (match-string 1)))))
+	(goto-char point)
+	point
+	))))
+
 
 (defun clime-ac-complete-action ()
   "Defines action to perform when user selects a completion candidate.
@@ -209,12 +244,25 @@ be used later to give contextual help when entering arguments."
     (cache . t)
     ))
 
+
+(ac-define-source clime-scope-names
+  '((document . clime-ac-get-doc)
+    (candidates . (clime-ac-name-candidates ac-prefix))
+    (prefix . clime-ac-name-prefix)
+    (action . clime-ac-complete-action)
+    (requires . 0)
+    (symbol . "s")
+    (cache . t)
+    ))
+
+
 (defun clime-ac-enable ()
   (make-local-variable 'ac-sources)
 
   ;; Note, we try to complete names before members.
   ;; This simplifies the regexes.
-  (setq ac-sources '(ac-source-clime-members ))
+  (setq ac-sources '(ac-source-clime-members
+		     ac-source-clime-scope-names))
 
   (make-local-variable 'ac-use-comphist)
   (setq ac-use-comphist t)

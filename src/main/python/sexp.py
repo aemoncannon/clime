@@ -15,8 +15,10 @@ def read_from(tokens):
     token = tokens.pop(0)
     if '(' == token:
         L = []
-        while tokens[0] != ')':
+        while len(tokens) > 0 and tokens[0] != ')':
             L.append(read_from(tokens))
+        if len(tokens) == 0:
+          raise SyntaxError('unexpected EOF while reading list.')
         tokens.pop(0) # pop off ')'
         return L
     elif ')' == token:
@@ -55,7 +57,7 @@ def atom(token):
     elif ch == ":":
         return Keyword(token)
     elif ch == "\"":
-        return token[1:-1]
+        return token[1:-1].replace("\\\\", "\\")
     elif ch.isdigit():
         return int(token)
     else:
@@ -71,7 +73,7 @@ def atom_to_str(exp):
     elif (not exp) and (type(exp) == type(False)):
         return "nil"
     elif type(exp) == type(""):
-        return "\"" + exp + "\""
+        return "\"" + exp.replace("\\", "\\\\").replace("\"", "\\\"") + "\""
     else:
         return str(exp)
 
@@ -80,3 +82,7 @@ def repl(prompt='lis.py> '):
     while True:
         val = eval(parse(raw_input(prompt)))
         if val is not None: print to_string(val)
+
+
+if __name__ == "__main__":
+  print(str(read("nil")))

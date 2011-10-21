@@ -60,9 +60,7 @@ class ClangJob(Job):
     return (["clang"] + 
             ["-cc1",
              "-fsyntax-only",
-             "-code-completion-at=" + filename + ":" + str(line) + ":" + str(col),
-             "-code-completion-macros",
-             "-code-completion-patterns"
+             "-code-completion-at=" + filename + ":" + str(line) + ":" + str(col)
              ] +
             self.config['completion_options'] + 
             self.config['compile_directives'] + 
@@ -128,32 +126,37 @@ class ClangCompletionsJob(ClangJob):
   RE_COMPLETION = re.compile("^COMPLETION: (.+?) : (.+?)$")
 
   def run(self):
+#    f = open(self.filename)
+#    for l in f.readlines():
+#      print l
+    case_sens = (re.compile("[A-Z]")).search(self.prefix) is not None
     cmd = self.clang_completions_base_cmd(self.filename, self.line, self.col)
-    print cmd
     sys.stdout.flush()
     clang_output = util.run_process(" ".join(cmd))
     candidates = []
-    for line in clang_output:
+    lines = [l for l in clang_output]
+    for line in lines:
       print line
       m = self.RE_COMPLETION.match(line)
       if m:
         name = m.group(1)
         tpe = m.group(2)
-        if name.find(self.prefix) == 0:
+        if ((case_sens and name.find(self.prefix) == 0)
+            or (not case_sens and name.upper().find(self.prefix.upper()) == 0)):
           member = model.make_member(tpe)
-          if member:
+          if member is not None:
             candidates.append(
-              [key(":name"),member.name,
-               key(":type-sig"),str(member),
-               key(":is-callable"),member.is_callable(),
-               key(":args-placeholder"),member.args_placeholder()
-               ])
+                [key(":name"), member.name,
+                 key(":type-sig"), str(member),
+                 key(":is-callable"), member.is_callable(),
+                 key(":args-placeholder"), member.args_placeholder()
+                 ])
           else:
             candidates.append(
-              [key(":name"),m.group(1),
-               key(":type-sig"),m.group(2),
-               key(":args-placeholder"),"",
-               ])
+                [key(":name"),name,
+                 key(":type-sig"),tpe,
+                 key(":args-placeholder"),""
+                 ])
     util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
 
 
