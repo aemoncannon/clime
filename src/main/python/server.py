@@ -23,6 +23,7 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
       print "Looking for " + str(data_len) + " bytes"
       data = self.request.recv(data_len)
       print "Sexp str: " + str(data)
+      sys.stdout.flush()
 
       try:
         parsed_sexp = sexp.read(data)
