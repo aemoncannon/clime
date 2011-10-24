@@ -77,11 +77,13 @@ target of the call. Point should be be over last character of call target."
 	 (clime-rpc-include-completions buffer-file-name prefix)))
     (mapcar (lambda (include) 
 	      (let ((name (plist-get include :name))
-		    (path (plist-get include :rel-path)))
-	      (propertize name
-			  'rel-path path
-			  'summary path
-			  )))
+		    (path (plist-get include :rel-path))
+		    (special (plist-get include :special)))
+		(propertize name
+			    'rel-path path
+			    'summary path
+			    'special special
+			    )))
 	    includes)))
 
 
@@ -132,19 +134,20 @@ changes will be forgotten."
 		   (- (point) 1)
 		   (point-at-eol))))
 
+
 (defun clime-ac-include-prefix ()
   "Starting at current point. Find the point of completion for a member access.
    Return nil if we are not currently looking at a member access."
-  (let ((p (point)))
-    (save-excursion
-      (when (re-search-backward "#include [<\"]\\([A-z_\\-\\.]*\\)" (point-at-bol) t)
-	(- p (length (match-string 1)))))))
+  (let ((point (re-search-backward "\\(#include \\)\\([A-z_\\-\\.]*\\)" (point-at-bol) t)))
+    (if point (+ (length (match-string 1)) point))))
+
 
 (defun clime-ac-member-prefix ()
   "Starting at current point. Find the point of completion for a member access.
    Return nil if we are not currently looking at a member access."
   (let ((point (re-search-backward "\\(\\.\\|->\\|::\\)\\([A-z_\\-]*\\)?" (point-at-bol) t)))
     (if point (+ (length (match-string 1)) point))))
+
 
 (defvar clime-ac-name-following-keyword-re
   (concat
@@ -195,9 +198,13 @@ be used later to give contextual help when entering arguments."
   "Defines action to perform when user selects a completion candidate."
   (let* ((candidate candidate) ;;Grab from dynamic environment..
 	 (name candidate)
-	 (path (get-text-property 0 'rel-path name)))
+	 (path (get-text-property 0 'rel-path name))
+	 (is-special (get-text-property 0 'special name)))
+
     (kill-backward-chars (length name))
-    (insert path)))
+    (if is-special
+	(insert (format "<%s>" name))
+      (insert format "\"%s\"" path))))
 
 
 
@@ -289,8 +296,7 @@ be used later to give contextual help when entering arguments."
     ))
 
 (ac-define-source clime-includes
-  '((document . clime-ac-get-doc)
-    (candidates . (clime-ac-include-candidates ac-prefix))
+  '((candidates . (clime-ac-include-candidates ac-prefix))
     (prefix . clime-ac-include-prefix)
     (action . clime-ac-complete-include-action)
     (requires . 0)

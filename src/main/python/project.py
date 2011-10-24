@@ -181,7 +181,9 @@ class IncludeCompletionsJob(ClangJob):
               or (not case_sens and name.upper().find(self.prefix.upper()) == 0))):
             candidates.append(
                 [key(":name"),name,
-                 key(":rel-path"),filename])
+                 key(":rel-path"),filename,
+                 key(":special"), len(ext) == 0
+                 ])
     util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
 
 
