@@ -79,7 +79,9 @@ target of the call. Point should be be over last character of call target."
 	      (let ((name (plist-get include :name))
 		    (path (plist-get include :rel-path)))
 	      (propertize name
-			  'rel-path path)))
+			  'rel-path path
+			  'summary path
+			  )))
 	    includes)))
 
 
@@ -135,7 +137,7 @@ changes will be forgotten."
    Return nil if we are not currently looking at a member access."
   (let ((p (point)))
     (save-excursion
-      (when (re-search-backward "#include [<\"]\\([A-z_\\-]*\\)" (point-at-bol) t)
+      (when (re-search-backward "#include [<\"]\\([A-z_\\-\\.]*\\)" (point-at-bol) t)
 	(- p (length (match-string 1)))))))
 
 (defun clime-ac-member-prefix ()
@@ -292,7 +294,6 @@ be used later to give contextual help when entering arguments."
     (prefix . clime-ac-include-prefix)
     (action . clime-ac-complete-include-action)
     (requires . 0)
-    (symbol . "s")
     (cache . t)
     ))
 
@@ -303,9 +304,9 @@ be used later to give contextual help when entering arguments."
 
   ;; Note, we try to complete names before members.
   ;; This simplifies the regexes.
-  (setq ac-sources '(ac-source-clime-members
+  (setq ac-sources '(ac-source-clime-includes
+		     ac-source-clime-members
 		     ac-source-clime-scope-names
-		     ac-source-clime-includes
 		     ))
 
   (make-local-variable 'ac-use-comphist)

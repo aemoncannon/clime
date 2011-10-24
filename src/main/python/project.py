@@ -174,12 +174,14 @@ class IncludeCompletionsJob(ClangJob):
       for root, dirnames, filenames in os.walk(dir):
         for filename in fnmatch.filter(filenames, "*"):
           path = os.path.join(root, filename)
-          name = os.path.basename(path)
-          if ((case_sens and name.find(self.prefix) == 0)
-            or (not case_sens and name.upper().find(self.prefix.upper()) == 0)):
+          p,name = os.path.split(path)
+          base,ext = os.path.splitext(name)
+          if ((ext == ".h" or ext == "" or ext == ".hpp") and
+              ((case_sens and name.find(self.prefix) == 0)
+              or (not case_sens and name.upper().find(self.prefix.upper()) == 0))):
             candidates.append(
                 [key(":name"),name,
-                 key(":rel-path"),path])
+                 key(":rel-path"),filename])
     util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
 
 
