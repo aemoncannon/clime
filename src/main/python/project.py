@@ -9,6 +9,7 @@ import re
 import depgraph
 from glob import glob
 import model
+import fnmatch
 
 
 
@@ -126,9 +127,9 @@ class ClangCompletionsJob(ClangJob):
   RE_COMPLETION = re.compile("^COMPLETION: (.+?) : (.+?)$")
 
   def run(self):
-#    f = open(self.filename)
-#    for l in f.readlines():
-#      print l
+    #    f = open(self.filename)
+    #    for l in f.readlines():
+    #      print l
     case_sens = (re.compile("[A-Z]")).search(self.prefix) is not None
     cmd = self.clang_completions_base_cmd(self.filename, self.line, self.col)
     sys.stdout.flush()
@@ -168,9 +169,17 @@ class IncludeCompletionsJob(ClangJob):
 
   def run(self):
     candidates = []
-    candidates.append(
-        [key(":name"),"fuckface",
-         key(":rel-path"),"../fuckface"])
+    case_sens = (re.compile("[A-Z]")).search(self.prefix) is not None
+    for dir in self.config['compile_include_dirs']:
+      for root, dirnames, filenames in os.walk(dir):
+        for filename in fnmatch.filter(filenames, "*"):
+          path = os.path.join(root, filename)
+          name = os.path.basename(path)
+          if ((case_sens and name.find(self.prefix) == 0)
+            or (not case_sens and name.upper().find(self.prefix.upper()) == 0)):
+            candidates.append(
+                [key(":name"),name,
+                 key(":rel-path"),path])
     util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
 
 
