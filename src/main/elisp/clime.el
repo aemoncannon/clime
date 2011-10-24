@@ -2377,6 +2377,9 @@ with the current project's dependencies loaded. Returns a property list."
 (defun clime-rpc-completions (file-name line col prefix)
   (clime-eval `(swank:completions ,file-name ,line ,col ,prefix)))
 
+(defun clime-rpc-include-completions (file-name prefix)
+  (clime-eval `(swank:include-completions ,file-name ,prefix)))
+
 (defun clime-rpc-async-format-files (file-names continue)
   (clime-eval-async `(swank:format-source ,file-names) continue))
 

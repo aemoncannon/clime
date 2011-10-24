@@ -159,6 +159,20 @@ class ClangCompletionsJob(ClangJob):
                  ])
     util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
 
+class IncludeCompletionsJob(ClangJob):
+
+  def __init__(self, req, call_id, config, filename, prefix):
+    ClangJob.__init__(self, req, call_id, config)
+    self.filename = filename
+    self.prefix = prefix
+
+  def run(self):
+    candidates = []
+    candidates.append(
+        [key(":name"),"fuckface",
+         key(":rel-path"),"../fuckface"])
+    util.send_sexp(self.req, util.return_ok(candidates, self.call_id))
+
 
 class ClangCompileFileJob(ClangJob):
 
@@ -343,4 +357,10 @@ class Project:
     col = rpc[3]
     prefix = rpc[4]
     self.start_job(ClangCompletionsJob(req, call_id, self.compile_config(), filename, line, col, prefix))
+
+  def handle_rpc_include_completions(self, rpc, req, call_id):
+    filename = rpc[1]
+    prefix = rpc[2]
+    self.start_job(IncludeCompletionsJob(req, call_id, self.compile_config(), filename, prefix))
+
 

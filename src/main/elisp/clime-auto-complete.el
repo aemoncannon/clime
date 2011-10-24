@@ -64,11 +64,24 @@ target of the call. Point should be be over last character of call target."
 (defun clime-ac-name-candidates (prefix)
   "Return candidate list."
   (let ((members
-	  (clime-ac-with-buffer-copy
-	   (clime-write-buffer)
-	   (clime-completions-at-point prefix))))
+	 (clime-ac-with-buffer-copy
+	  (clime-write-buffer)
+	  (clime-completions-at-point prefix))))
     (clime-make-candidates members)
     ))
+
+
+(defun clime-ac-include-candidates (prefix)
+  "Return candidate list."
+  (let ((includes
+	 (clime-rpc-include-completions buffer-file-name prefix)))
+    (mapcar (lambda (include) 
+	      (let ((name (plist-get include :name))
+		    (path (plist-get include :rel-path)))
+	      (propertize name
+			  'rel-path path)))
+	    includes)))
+
 
 (defmacro* clime-ac-with-buffer-copy (&rest body)
   "Create a duplicate of the current buffer, copying all contents.
@@ -116,6 +129,14 @@ changes will be forgotten."
 		  (min
 		   (- (point) 1)
 		   (point-at-eol))))
+
+(defun clime-ac-include-prefix ()
+  "Starting at current point. Find the point of completion for a member access.
+   Return nil if we are not currently looking at a member access."
+  (let ((p (point)))
+    (save-excursion
+      (when (re-search-backward "#include [<\"]\\([A-z_\\-]*\\)" (point-at-bol) t)
+	(- p (length (match-string 1)))))))
 
 (defun clime-ac-member-prefix ()
   "Starting at current point. Find the point of completion for a member access.
@@ -166,6 +187,16 @@ be used later to give contextual help when entering arguments."
 	(insert (format "(%s)" arg-str)))
       (forward-char 1)
       )))
+
+
+(defun clime-ac-complete-include-action ()
+  "Defines action to perform when user selects a completion candidate."
+  (let* ((candidate candidate) ;;Grab from dynamic environment..
+	 (name candidate)
+	 (path (get-text-property 0 'rel-path name)))
+    (kill-backward-chars (length name))
+    (insert path)))
+
 
 
 (defun clime-ac-get-active-param-info ()
@@ -255,6 +286,17 @@ be used later to give contextual help when entering arguments."
     (cache . t)
     ))
 
+(ac-define-source clime-includes
+  '((document . clime-ac-get-doc)
+    (candidates . (clime-ac-include-candidates ac-prefix))
+    (prefix . clime-ac-include-prefix)
+    (action . clime-ac-complete-include-action)
+    (requires . 0)
+    (symbol . "s")
+    (cache . t)
+    ))
+
+
 
 (defun clime-ac-enable ()
   (make-local-variable 'ac-sources)
@@ -262,7 +304,9 @@ be used later to give contextual help when entering arguments."
   ;; Note, we try to complete names before members.
   ;; This simplifies the regexes.
   (setq ac-sources '(ac-source-clime-members
-		     ac-source-clime-scope-names))
+		     ac-source-clime-scope-names
+		     ac-source-clime-includes
+		     ))
 
   (make-local-variable 'ac-use-comphist)
   (setq ac-use-comphist t)
