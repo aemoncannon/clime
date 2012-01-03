@@ -190,7 +190,9 @@ be used later to give contextual help when entering arguments."
     (when is-callable
       (save-excursion
 	(insert (format "(%s)" arg-str)))
-      (forward-char 1)
+      (if (= (length arg-str) 0)
+	  (forward-char 2)
+	(forward-char 1))
       )))
 
 
@@ -204,7 +206,7 @@ be used later to give contextual help when entering arguments."
     (kill-backward-chars (length name))
     (if is-special
 	(insert (format "<%s>" name))
-      (insert format "\"%s\"" path))))
+      (insert (format "\"%s\"" path)))))
 
 
 

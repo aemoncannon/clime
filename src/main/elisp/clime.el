@@ -113,14 +113,14 @@
   :group 'clime-server)
 
 (defcustom clime-default-server-root
-   (file-name-directory
-     (directory-file-name
+  (file-name-directory
+   (directory-file-name
     (file-name-directory
      (directory-file-name
-     (file-name-directory
-      (directory-file-name
-       (file-name-directory
-	(locate-library "clime"))))))))
+      (file-name-directory
+       (directory-file-name
+	(file-name-directory
+	 (locate-library "clime"))))))))
   "Location of CLIME server library."
   :type 'string
   :group 'clime-server)
@@ -209,6 +209,8 @@ Do not show 'Writing..' message."
       (define-key prefix-map (kbd "C-v a") 'clime-check-all)
       (define-key prefix-map (kbd "C-v z") 'clime-analyze-all)
       (define-key prefix-map (kbd "C-v s") 'clime-analyze-current-file)
+      (define-key prefix-map (kbd "C-v q") 'clime-open-qt-type-in-browser)
+      (define-key prefix-map (kbd "C-v o") 'ff-find-other-file)
 
       (define-key map clime-mode-key-prefix prefix-map)
 
@@ -442,7 +444,7 @@ Analyzer will be restarted. All source will be recompiled."
 	   (clime-net-close conn))
 	 (get-buffer-process buffer))
 	(t (clime-start-server program program-args env directory
-				(generate-new-buffer-name buffer)))))
+			       (generate-new-buffer-name buffer)))))
 
 
 (defun clime-reinitialize-inferior-server-p (program program-args env buffer)
@@ -1530,8 +1532,8 @@ If PROCESS is not specified, `clime-connection' is used.
   "Send configuration to the server process. Setup handler for
  project info that the server will return."
   (clime-eval-async `(swank:init-project ,config)
-		     (clime-curry #'clime-handle-project-info
-				   conn)))
+		    (clime-curry #'clime-handle-project-info
+				 conn)))
 
 
 (defun clime-handle-project-info (conn info)
@@ -1579,8 +1581,8 @@ computed on server into the local config structure."
 ;;; you need to, but the others are usually more convenient.
 
 (defmacro* clime-rex ((&rest saved-vars)
-		       sexp
-		       &rest continuations)
+		      sexp
+		      &rest continuations)
   "(clime-rex (VAR ...) SEXP CLAUSES ...)
 
 Remote EXecute SEXP.
@@ -1782,12 +1784,12 @@ This idiom is preferred over `lexical-let'."
 	     (dolist (file files)
 	       (puthash (file-truename file) t file-set))
 	     (clime-clear-file-notes file-set)))
-	   
+	  
 
 	  ((:channel-send id msg)
 	   (clime-channel-send (or (clime-find-channel id)
-				    (error "Invalid channel id: %S %S" id msg))
-				msg))
+				   (error "Invalid channel id: %S %S" id msg))
+			       msg))
 	  ((:emacs-channel-send id msg)
 	   (clime-send `(:emacs-channel-send ,id ,msg)))
 	  ((:read-from-minibuffer thread tag prompt initial-value)
@@ -1863,9 +1865,9 @@ This idiom is preferred over `lexical-let'."
 (defun clime-add-notes (result)
   (let ((is-full (plist-get result :is-full))
 	(notes (plist-get result :notes)))
-      (setf (clime-compiler-notes (clime-connection))
-	    (append (clime-compiler-notes (clime-connection))
-	     notes))
+    (setf (clime-compiler-notes (clime-connection))
+	  (append (clime-compiler-notes (clime-connection))
+		  notes))
     (clime-make-note-overlays notes)
     (clime-update-note-counts)
     ))
@@ -1894,31 +1896,19 @@ This idiom is preferred over `lexical-let'."
 
 
 (defun clime-clear-file-notes (file-set)
-    (let* ((con (clime-connection))
-	   (notes (clime-compiler-notes con))
-	   (error-count 0)
-	   (warn-count 0)
-	   (revised '()))
-      (dolist (note notes)
-	(let ((f (plist-get note :file)))
-	  (when (not (gethash (file-truename f) file-set))
-	    (setq revised (cons note revised)))))
-      (setf (clime-compiler-notes con) (reverse revised)))
-    (clime-clear-note-overlays file-set)
-    (clime-update-note-counts))
+  (let* ((con (clime-connection))
+	 (notes (clime-compiler-notes con))
+	 (error-count 0)
+	 (warn-count 0)
+	 (revised '()))
+    (dolist (note notes)
+      (let ((f (plist-get note :file)))
+	(when (not (gethash (file-truename f) file-set))
+	  (setq revised (cons note revised)))))
+    (setf (clime-compiler-notes con) (reverse revised)))
+  (clime-clear-note-overlays file-set)
+  (clime-update-note-counts))
 
-
-(defun clime-make-overlay-at (file line col msg face)
-  "Create an overlay highlighting the given line in any
- buffer visiting the given file."
-    (when-let (buf (find-buffer-visiting file))
-      ;; If line provided, use line to define region
-      (when (integerp line)
-	(with-current-buffer buf
-	  (save-excursion
-	    (goto-line line)
-	    (clime-make-overlay (point-at-bol) (point-at-eol) msg face nil buf))))
-      ))
 
 
 (defun clime-make-note-overlays (notes)
@@ -1929,22 +1919,39 @@ This idiom is preferred over `lexical-let'."
       (let ((face
 	     (cond
 	      ((equal severity 'error)
+	       'clime-errline)
+	      (t
+	       'clime-warnline)))
+	    (highlight-face
+	     (cond
+	      ((equal severity 'error)
 	       'clime-errline-highlight)
 	      (t
 	       'clime-warnline-highlight))))
 
-	(when-let (ov (clime-make-overlay-at
-		       file line col
-		       msg face))
 
-	  (push ov clime-note-overlays))
+	(when-let (buf (find-buffer-visiting file))
+	  (with-current-buffer buf
+	    (save-excursion
+	      (goto-line line)
 
+	      (when-let (ov (clime-make-overlay 
+			     (point-at-bol) 
+			     (point-at-eol) 
+			     msg face nil buf))
+		(push ov clime-note-overlays))
+	      
+	      (let* ((start (- (+ (point-at-bol) col) 1))
+		     (end (+ start 1)))
+		(when-let (ov (clime-make-overlay start end msg highlight-face nil buf))
+		  (push ov clime-note-overlays)))
+	      )))
 	))))
 
 
 (defun clime-refresh-all-note-overlays ()
   (let ((notes (if (clime-connected-p)
-		    (clime-compiler-notes (clime-current-connection)))))
+		   (clime-compiler-notes (clime-current-connection)))))
     (clime-clear-note-overlays)
     (clime-make-note-overlays notes)
     ))
@@ -2020,7 +2027,7 @@ This idiom is preferred over `lexical-let'."
 	(max-line (line-number-at-pos (point-max))))
     (dolist (note notes)
       (if (and (clime-files-equal-p (clime-note-file note)
-				     buffer-file-name)
+				    buffer-file-name)
 	       (/= (clime-note-line note) cur-line))
 	  (let ((dist (cond
 		       (forward
@@ -2031,7 +2038,7 @@ This idiom is preferred over `lexical-let'."
 
 		       (t (if (> (clime-note-line note) cur-line)
 			      (+ cur-line (- max-line
-					    (clime-note-line note)))
+					     (clime-note-line note)))
 			    (- cur-line (clime-note-line note)))))))
 
 	    (when (< dist best-dist)
@@ -2106,6 +2113,16 @@ This idiom is preferred over `lexical-let'."
 
      (t
       (message "Sorry, no definition found.")))))
+
+
+(defun clime-open-qt-type-in-browser ()
+  (interactive)
+  (when-let (sym (symbol-at-point))
+    (let ((name (downcase (clime-kill-txt-props
+			   (symbol-name sym)))))
+      (shell-command 
+       (format "open http://doc.qt.nokia.com/stable/%s.html" name)))))
+
 
 
 (defun clime-files-equal-p (f1 f2)
@@ -2207,17 +2224,17 @@ This idiom is preferred over `lexical-let'."
 			   ))
 		 )
 
-	      (clime-insert-with-face
-			      (concat "\n" file "\n")
-			      face)
-	      (let ((p (point)))
-		(insert (format "%s: %s : line %s"
-				header msg line))
-		(clime-make-code-link p (point)
-				      file
-				      line
-				      col
-				      face))
+	     (clime-insert-with-face
+	      (concat "\n" file "\n")
+	      face)
+	     (let ((p (point)))
+	       (insert (format "%s: %s : line %s"
+			       header msg line))
+	       (clime-make-code-link p (point)
+				     file
+				     line
+				     col
+				     face))
 	     (insert "\n\n")
 	     )))
        (insert "\n\n"))
@@ -2320,8 +2337,8 @@ This idiom is preferred over `lexical-let'."
 (defun clime-debug-unit-info-at-point ()
   (interactive)
   (clime-rpc-debug-unit-info (file-name-nondirectory buffer-file-name)
-			      (line-number-at-pos (point))
-			      ""))
+			     (line-number-at-pos (point))
+			     ""))
 
 ;; Basic RPC calls
 
@@ -2343,7 +2360,7 @@ with the current project's dependencies loaded. Returns a property list."
    `(swank:debug-config)))
 
 (defun clime-rpc-debug-unit-info (file-name-no-path
-				   line-number &optional package-prefix)
+				  line-number &optional package-prefix)
   "Get descriptive info for the compilation unit defined at
  file-name/line-number."
   (clime-eval
@@ -2657,8 +2674,8 @@ with the current project's dependencies loaded. Returns a property list."
 			(clime-make-doc-url type)
 			)))
 	  (clime-insert-link " doc" url
-			      (+ (clime-pos-offset pos)
-				 clime-ch-fix))))
+			     (+ (clime-pos-offset pos)
+				clime-ch-fix))))
 
       )))
 
@@ -2791,8 +2808,8 @@ with the current project's dependencies loaded. Returns a property list."
 	 ;; Display main type
 	 (let* ((full-type-name (plist-get type :name)))
 	   (clime-insert-with-face (format "%s\n"
-					    (clime-declared-as-str type))
-				    font-lock-comment-face)
+					   (clime-declared-as-str type))
+				   font-lock-comment-face)
 	   (clime-inspector-insert-linked-type type t t)
 	   (insert "\n")
 
@@ -2985,6 +3002,7 @@ inspect the package of the current source file."
        (goto-char (point-min))
        ))))
 
+
 (defvar clime-inspector-history '()
   "Maintain a history of the info objects viewed in the inspector buffer.")
 
@@ -3043,7 +3061,7 @@ inspect the package of the current source file."
 
 
 (defmacro* clime-with-inspector-buffer ((name object &optional select)
-					 &body body)
+					&body body)
   "Extend the standard popup buffer with inspector-specific bindings."
   `(clime-with-popup-buffer
     (,name t ,select)
@@ -3335,7 +3353,7 @@ See `view-return-to-alist' for a similar idea.")
 
 ;; Interface
 (defmacro* clime-with-popup-buffer ((name &optional connection select)
-				     &body body)
+				    &body body)
   "Similar to `with-output-to-temp-buffer'.
 Bind standard-output and initialize some buffer-local variables.
 Restore window configuration when closed.
@@ -3461,9 +3479,9 @@ The buffer also uses the minor-mode `clime-popup-buffer-mode'."
     (set (make-local-variable 'truncate-lines) t)))
 
 (clime-define-keys clime-connection-list-mode-map
-		    ("g"         'clime-update-connection-list)
-		    ((kbd "C-k") 'clime-quit-connection-at-point)
-		    ("R"         'clime-restart-connection-at-point))
+		   ("g"         'clime-update-connection-list)
+		   ((kbd "C-k") 'clime-quit-connection-at-point)
+		   ("R"         'clime-restart-connection-at-point))
 
 (defun clime-connection-at-point ()
   (or (get-text-property (point) 'clime-connection)
@@ -3496,8 +3514,8 @@ The buffer also uses the minor-mode `clime-popup-buffer-mode'."
   "Display a list of all connections."
   (interactive)
   (clime-with-popup-buffer (clime-connections-buffer-name)
-			    (clime-connection-list-mode)
-			    (clime-draw-connection-list)))
+			   (clime-connection-list-mode)
+			   (clime-draw-connection-list)))
 
 (defun clime-update-connection-list ()
   "Display a list of all connections."

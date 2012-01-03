@@ -32,8 +32,8 @@ class ClangJob(Job):
     Job.__init__(self, req, call_id)
     self.config = config
 
-  def __nuke_all_precompiled_headers(self):
-    for r in self.source_roots:
+  def nuke_all_precompiled_headers(self):
+    for r in self.config['source_roots']:
       for f in glob (r + '*.h.gch'):
         os.unlink (f)
 
@@ -87,8 +87,8 @@ class ClangJob(Job):
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
             ["-include" + inc for inc in self.config['compile_include_headers']])
 
-  SEVERITY_MAP = {'error':'error','warning':'warn','note':'info'}
-  RE_ITEM = re.compile("^(.+?):([0-9]+):([0-9]+): (error|warning|note): (.+)$")
+  SEVERITY_MAP = {'error':'error','warning':'warn','note':'info','fatal error':'error'}
+  RE_ITEM = re.compile("^(.+?):([0-9]+):([0-9]+): (error|warning|note|fatal error): (.+)$")
   def receive_syntax_checker_output(self, req, clang_output):
     for line in clang_output:
       m = self.RE_ITEM.match(line)
@@ -199,11 +199,15 @@ class ClangCompileFileJob(ClangJob):
     sys.stdout.flush()
 
     if util.is_unit(self.filename):
+      print "Checking source unit " + self.filename
+      sys.stdout.flush()
       cmd = self.clang_base_cmd() + [self.filename]
       util.send_sexp(
           self.req, [key(":clear-file-notes"), [self.filename]])
     elif util.is_header(self.filename):
-      self.__nuke_all_precompiled_headers()
+      print "Checking header " + self.filename
+      sys.stdout.flush()
+      self.nuke_all_precompiled_headers()
       util.send_sexp(
           self.req,
           [key(":clear-all-notes"), True])
