@@ -217,7 +217,7 @@ class ClangCompileFileJob(ClangJob):
       units = [f for f in invalidated if util.is_unit(f)]
 
       print "Recompiling " + str(len(units)) + " dependent units."
-      cmd = self.clang_base_cmd() + units
+      cmd = self.clang_base_cmd() + units + [self.filename]
       sys.stdout.flush()
     else:
       assert False, "WTF. Not header OR source unit?"

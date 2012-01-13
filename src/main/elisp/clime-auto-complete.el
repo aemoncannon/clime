@@ -138,26 +138,26 @@ changes will be forgotten."
 (defun clime-ac-include-prefix ()
   "Starting at current point. Find the point of completion for a member access.
    Return nil if we are not currently looking at a member access."
-  (let ((point (re-search-backward "\\(#include \\)\\([A-z_\\-\\.]*\\)" (point-at-bol) t)))
+  (let ((point (re-search-backward "\\(#include \\)\\([A-z0-9_\\-\\.]*\\)" (point-at-bol) t)))
     (if point (+ (length (match-string 1)) point))))
 
 
 (defun clime-ac-member-prefix ()
   "Starting at current point. Find the point of completion for a member access.
    Return nil if we are not currently looking at a member access."
-  (let ((point (re-search-backward "\\(\\.\\|->\\|::\\)\\([A-z_\\-]*\\)?" (point-at-bol) t)))
+  (let ((point (re-search-backward "\\(\\.\\|->\\|::\\)\\([A-z0-9_\\-]*\\)?" (point-at-bol) t)))
     (if point (+ (length (match-string 1)) point))))
 
 
 (defvar clime-ac-name-following-keyword-re
   (concat
    "\\(?:\\W\\|\\s-\\)\\(?:else\\|case\\|new\\|with\\|extends\\|yield\\)"
-   "\\s-+\\(\\w*\\)"))
+   "\\s-+\\([A-z0-9_\\-]*\\)"))
 
 (defvar clime-ac-name-following-syntax-re
   (concat
    "[!=(\\[,;}{\n+*/\\^&~%-]"
-   "\\s-*\\(\\w*\\)"))
+   "\\s-*\\([A-z0-9_\\-]*\\)"))
 
 (defun clime-ac-name-prefix ()
   "Starting at current point - find the point of completion for a symbol.
