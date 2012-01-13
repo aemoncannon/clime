@@ -151,7 +151,7 @@ changes will be forgotten."
 
 (defvar clime-ac-name-following-keyword-re
   (concat
-   "\\(?:\\W\\|\\s-\\)\\(?:else\\|case\\|new\\|with\\|extends\\|yield\\)"
+   "\\(?:\\W\\|\\s-\\)\\(?:else\\|case\\|new\\|with\\|extends\\|yield\\|return\\)"
    "\\s-+\\([A-z0-9_\\-]*\\)"))
 
 (defvar clime-ac-name-following-syntax-re

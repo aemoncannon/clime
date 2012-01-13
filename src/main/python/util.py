@@ -36,17 +36,44 @@ def send_sexp(req, response_sexp):
     req.send(response_str)
     sys.stdout.flush()
 
-def run_process(cmd_str):
-    print cmd_str
+def run_process(cmd):
+    print " ".join(cmd)
     sys.stdout.flush()
-    p = subprocess.Popen(cmd_str, stdout=subprocess.PIPE, 
-                         stderr=subprocess.STDOUT, shell=True)
+    p = subprocess.Popen(cmd, stdout=subprocess.PIPE, 
+                         stderr=subprocess.STDOUT)
     while(True):
-        retcode = p.poll() #returns None while subprocess is running
-        line = p.stdout.readline()
-        yield line
-        if(retcode is not None):
-            break
+      retcode = p.poll() #returns None while subprocess is running
+      line = p.stdout.readline()
+      yield line
+      if(retcode is not None):
+        break
+
+def run_process_and_forget(cmd):
+    print " ".join(cmd)
+    sys.stdout.flush()
+    p = subprocess.Popen(cmd)
+
+
+def run_process_for_output_lines(cmd):
+    print " ".join(cmd)
+    sys.stdout.flush()
+    p = subprocess.Popen(cmd, 
+                         stdout=subprocess.PIPE,
+                         stderr=subprocess.PIPE, 
+                         universal_newlines=True)
+    stdout, stderr = p.communicate()
+    return (stdout.split("\n"),stderr.split("\n"))
+
+
+#def run_process_for_output_lines(cmd_str):
+#    print cmd_str
+#    sys.stdout.flush()
+#    s = subprocess.check_output(cmd_str, 
+#                                stderr=subprocess.STDOUT, 
+#                                shell=True,
+#                                universal_newlines=True)
+#    return s.split("\n")
+
 
 def sexp_to_key_map(sexp):
     key_type = type(key(":key"))

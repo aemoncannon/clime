@@ -1850,6 +1850,13 @@ This idiom is preferred over `lexical-let'."
   (eval (nth (random (length clime-words-of-encouragement))
 	     clime-words-of-encouragement)))
 
+(defun clime-rebuild-pch ()
+  "Rebuild the pch file designated in the config."
+  (interactive)
+  (if (clime-rpc-rebuild-pch)
+      (message "Rebuilt.")
+    (message "Error building pch.")))
+
 
 ;; Compiler Notes (Error/Warning overlays)
 
@@ -2506,6 +2513,9 @@ with the current project's dependencies loaded. Returns a property list."
 
 (defun clime-rpc-shutdown-server ()
   (clime-eval `(swank:shutdown-server)))
+
+(defun clime-rpc-rebuild-pch ()
+  (clime-eval `(swank:rebuild-pch)))
 
 
 
