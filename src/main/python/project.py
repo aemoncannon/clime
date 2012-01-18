@@ -51,14 +51,17 @@ class ClangJob(Job):
     else:
       return []
 
-  def clang_base_cmd(self):
+  def clang_base_cmd(self, use_pch = False):
+    pch = []
+    if use_pch:
+      pch = self.pch_options()
     return ([self.config["clang_cmd"], "-cc1"] + 
             [ #"-fdiagnostics-print-source-range-info",
             "-fdiagnostics-parseable-fixits",
             "-fno-caret-diagnostics",
             "-fsyntax-only"
             ] +
-            self.pch_options() + 
+            pch + 
             self.config['compile_options'] + 
             self.config['compile_directives'] + 
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
@@ -217,7 +220,7 @@ class ClangCompileFileJob(ClangJob):
     if util.is_unit(self.filename):
       print "Checking source unit " + self.filename
       sys.stdout.flush()
-      cmd = self.clang_base_cmd() + [self.filename]
+      cmd = self.clang_base_cmd(use_pch = True) + [self.filename]
       util.send_sexp(
           self.req, [key(":clear-file-notes"), [self.filename]])
     elif util.is_header(self.filename):
@@ -232,7 +235,7 @@ class ClangCompileFileJob(ClangJob):
       units = [f for f in invalidated if util.is_unit(f)]
 
       print "Recompiling " + str(len(units)) + " dependent units."
-      cmd = self.clang_base_cmd() + units + [self.filename]
+      cmd = self.clang_base_cmd(use_pch = True) + units + [self.filename]
       sys.stdout.flush()
     else:
       assert False, "WTF. Not header OR source unit?"
