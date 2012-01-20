@@ -10,7 +10,7 @@ import depgraph
 from glob import glob
 import model
 import fnmatch
-
+import traceback
 
 
 class Job:
@@ -162,7 +162,9 @@ class ClangCompletionsJob(ClangJob):
         tpe = m.group(2)
         if ((case_sens and name.find(self.prefix) == 0)
             or (not case_sens and name.upper().find(self.prefix.upper()) == 0)):
+
           member = model.make_member(tpe)
+
           if member is not None:
             candidates.append(
                 [key(":name"), member.name,
@@ -311,7 +313,11 @@ class Project:
   def start_job(self, job):
     self.cancel_outstanding_jobs()
     self.jobs.append(job)
-    job.run()
+    try:
+      job.run()
+    except Exception as e:
+      traceback.print_exc(file=sys.stdout)
+      util.send_sexp(job.req, util.return_ok(False, job.call_id))
 
   def handle_rpc_connection_info(self, rpc, req, call_id):
     util.send_sexp(req, util.return_ok(                
