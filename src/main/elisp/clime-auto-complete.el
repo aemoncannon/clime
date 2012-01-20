@@ -172,6 +172,13 @@ changes will be forgotten."
 	))))
 
 
+(defun clime-at-eol-p ()
+  (integerp (string-match 
+	     "^[ \n]*$" 
+	     (buffer-substring-no-properties 
+	      (point) 
+	      (point-at-eol)))))
+
 (defun clime-ac-complete-action ()
   "Defines action to perform when user selects a completion candidate.
 
@@ -187,13 +194,17 @@ be used later to give contextual help when entering arguments."
 	 (name candidate)
 	 (arg-str (get-text-property 0 'args-placeholder name))
 	 (is-callable (get-text-property 0 'is-callable name)))
+
+    (save-excursion
+      (when is-callable (insert (format "(%s)" arg-str)))
+      (when (clime-at-eol-p) (insert ";")))
+
     (when is-callable
-      (save-excursion
-	(insert (format "(%s)" arg-str)))
       (if (= (length arg-str) 0)
 	  (forward-char 2)
-	(forward-char 1))
-      )))
+	(forward-char 1)))
+
+    ))
 
 
 (defun clime-ac-complete-include-action ()
