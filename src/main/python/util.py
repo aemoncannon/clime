@@ -62,7 +62,8 @@ def run_process_for_output_lines(cmd):
                          stderr=subprocess.PIPE, 
                          universal_newlines=True)
     stdout, stderr = p.communicate()
-    return (stdout.split("\n"),stderr.split("\n"))
+    status = p.returncode
+    return (stdout.split("\n"),stderr.split("\n"), status)
 
 
 #def run_process_for_output_lines(cmd_str):

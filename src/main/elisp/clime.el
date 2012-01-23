@@ -1547,6 +1547,7 @@ computed on server into the local config structure."
 			     )))
     (setf config (plist-put config :source-roots
 			    (plist-get info :source-roots)))
+    (add-to-list 'tags-table-list (plist-get config :root-dir))
     (clime-set-config conn config)
     (force-mode-line-update t)))
 
@@ -1856,6 +1857,13 @@ This idiom is preferred over `lexical-let'."
   (if (clime-rpc-rebuild-pch)
       (message "Rebuilt.")
     (message "Error building pch.")))
+
+(defun clime-rebuild-tags ()
+  "Rebuild the ctags file."
+  (interactive)
+  (if (clime-rpc-rebuild-tags)
+      (message "Rebuilt.")
+    (message "Error building tags.")))
 
 
 ;; Compiler Notes (Error/Warning overlays)
@@ -2516,6 +2524,9 @@ with the current project's dependencies loaded. Returns a property list."
 
 (defun clime-rpc-rebuild-pch ()
   (clime-eval `(swank:rebuild-pch)))
+
+(defun clime-rpc-rebuild-tags ()
+  (clime-eval `(swank:rebuild-tags)))
 
 
 

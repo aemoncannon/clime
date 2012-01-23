@@ -61,6 +61,8 @@ class TCPRequestHandler(SocketServer.BaseRequestHandler):
         proj.handle_rpc_include_completions(req, self.request, call_id)
       elif rpc_tag == key("swank:rebuild-pch"):
         proj.handle_rpc_rebuild_pch(req, self.request, call_id)
+      elif rpc_tag == key("swank:rebuild-tags"):
+        proj.handle_rpc_rebuild_tags(req, self.request, call_id)
       else:
         print "Unrecognized rpc " + str(rpc_tag)
         util.send_sexp(self.request, 

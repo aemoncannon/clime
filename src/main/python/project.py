@@ -52,27 +52,25 @@ class ClangJob(Job):
       return []
 
   def clang_base_cmd(self, use_pch = False):
-    pch = []
-    if use_pch:
-      pch = self.pch_options()
     return ([self.config["clang_cmd"], "-cc1"] + 
             [ #"-fdiagnostics-print-source-range-info",
             "-fdiagnostics-parseable-fixits",
             "-fno-caret-diagnostics",
             "-fsyntax-only"
             ] +
-            pch + 
+            (self.pch_options() if use_pch else []) +
             self.config['compile_options'] + 
             self.config['compile_directives'] + 
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
             ["-include" + inc for inc in self.config['compile_include_headers']])
 
-  def clang_completions_base_cmd(self, filename, line, col):
+  def clang_completions_base_cmd(self, filename, line, col, use_pch = True):
     return ([self.config["clang_cmd"], "-cc1"] + 
             ["-fsyntax-only",
-             "-code-completion-at=" + filename + ":" + str(line) + ":" + str(col)
+             "-code-completion-at=" + filename + ":" + str(line) + ":" + str(col),
+             "-code-completion-macros"
              ] +
-            self.pch_options() + 
+            (self.pch_options() if use_pch else []) +
             self.config['completion_options'] + 
             self.config['compile_directives'] + 
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
@@ -89,6 +87,11 @@ class ClangJob(Job):
             ["-I" + inc for inc in self.config['compile_include_dirs']] + 
             ["-include" + inc for inc in self.config['compile_include_headers']]
             )
+
+  def clang_tags_base_cmd(self, source_files):
+    return (["ctags", "-e", "-f", 
+             self.config['root_dir'] + "/TAGS"] + source_files)
+
 
   def analyzer_base_cmd(self):
     return (["scan-build", 
@@ -146,14 +149,28 @@ class ClangCompletionsJob(ClangJob):
 
   RE_COMPLETION = re.compile("^COMPLETION: (.+?) : (.+?)$")
 
+
+  # clang has a habit of segfaulting on big completion results when
+  # pch is enabled. If the command fails, try again without pch.
+  def run_command(self, use_pch):
+    cmd = self.clang_completions_base_cmd(self.filename, self.line, self.col, use_pch = use_pch)
+    (lines,err_lines,status) = util.run_process_for_output_lines(cmd)
+    sys.stdout.flush()
+    if use_pch and status < 0:
+      print "Status code of " + str(status) + ". Trying again without pch..."
+      for ln in err_lines:
+        print ln
+      return self.run_command(False)
+    else:
+      return lines
+      
+
   def run(self):
     #    f = open(self.filename)
     #    for l in f.readlines():
     #      print l
     case_sens = (re.compile("[A-Z]")).search(self.prefix) is not None
-    cmd = self.clang_completions_base_cmd(self.filename, self.line, self.col)
-    sys.stdout.flush()
-    (lines,err_lines) = util.run_process_for_output_lines(cmd)
+    lines = self.run_command(True)
     candidates = []
     for line in lines:
       m = self.RE_COMPLETION.match(line)
@@ -258,7 +275,7 @@ class RebuildPCHJob(ClangJob):
     sys.stdout.flush()
     header = self.config['pch_file'][0:-4]
     print "Rebuilding " + header
-    (out,err) = util.run_process_for_output_lines(
+    (out,err,status) = util.run_process_for_output_lines(
         self.clang_pch_base_cmd(
             [header],
             self.config['pch_file']
@@ -267,7 +284,31 @@ class RebuildPCHJob(ClangJob):
     print str(out)
     print str(err)
 
-    if len("".join(out)) == 0 and len("".join(err)) == 0:
+    if status >= 0:
+      util.send_sexp(self.req, util.return_ok(True, self.call_id))
+    else:
+      util.send_sexp(self.req, util.return_ok(False, self.call_id))
+
+
+class RebuildTagsJob(ClangJob):
+
+  def __init__(self, req, call_id, config):
+    ClangJob.__init__(self, req, call_id, config)
+
+  def run(self):
+    cmd = None
+    print "Rebuilding TAGS file..."
+
+    source_files = ([f for f in self.all_units()] + 
+                    [f for f in self.all_project_headers()])
+
+    (out,err,status) = util.run_process_for_output_lines(
+        self.clang_tags_base_cmd(source_files))
+    
+    print str(out)
+    print str(err)
+
+    if status >= 0:
       util.send_sexp(self.req, util.return_ok(True, self.call_id))
     else:
       util.send_sexp(self.req, util.return_ok(False, self.call_id))
@@ -379,6 +420,9 @@ class Project:
 
   def handle_rpc_rebuild_pch(self, rpc, req, call_id):
     self.start_job(RebuildPCHJob(req, call_id, self.config))
+
+  def handle_rpc_rebuild_tags(self, rpc, req, call_id):
+    self.start_job(RebuildTagsJob(req, call_id, self.config))
 
   def handle_rpc_analyze_file(self, rpc, req, call_id):
     filename = rpc[1]

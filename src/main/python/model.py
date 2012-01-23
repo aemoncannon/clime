@@ -13,8 +13,9 @@ import traceback
 def tok(str):
   return re.compile(str)
 
-def name(): return re.compile(r"(?:[a-zA-Z0-9_]+::)*[a-zA-Z0-9_]+")
+def name(): return re.compile(r"(?:[a-zA-Z0-9_]+::)*[~a-zA-Z0-9_]+")
 def type_basic_name(): return [tok("long long"),
+                               tok("long double"),
                                tok("unsigned int"),
                                tok("unsigned long long"),
                                name]
@@ -28,7 +29,7 @@ def typename(): return type_basic_name,0,("<",type_param_list,">")
 def typedecl(): return 0,const,typename,0,ref_or_ptr
 def const(): return tok("const")
 def param(): return "<#",typedecl,0,name,"#>"
-def optional_param_list(): return "{#,",param,-1,(",", param),"#}"
+def optional_param_list(): return ["{#,", "{#"],param,-1,(",", param),"#}"
 def required_param_list(): return param,-1,(",", param)
 def param_list(): return 0,required_param_list,0,optional_param_list
 def field(): return ("[#",typedecl,"#]"),name
@@ -168,7 +169,7 @@ class Param:
     m = match(ast, param_pat)
     if m:
       self.type = Type(m[":TYPE"])
-      self.name = flatten_ast(m[":NAME"])
+      self.name = flatten_ast(m[":NAME"]) if ":NAME" in m else None
     else:
       raise StandardError("Pattern match failed!")
 
@@ -177,7 +178,7 @@ class Param:
             key(":type"),self.type.to_sexp_list()]
 
   def __repr__(self):
-    return str(self.type) + " " + self.name
+    return str(self.type) + (" " + self.name if self.name else "")
 
 
 field_pat = ['field',[
@@ -216,7 +217,8 @@ def param_section_str(params, opt_params):
 function_pat = ['function',[
     ":RETURN_TYPE",
     ":FUNCTION_NAME", 
-    ['param_list', [["required_param_list", ":PARAMS"],["optional_param_list", ":OPTIONAL_PARAMS"]]],
+    ['param_list', [Opt(["required_param_list", ":PARAMS"]),
+                    ["optional_param_list", ":OPTIONAL_PARAMS"]]],
     ['const_func_mod', ":CONST"],
     ]]
 
@@ -267,7 +269,8 @@ class Function:
 
 constructor_pat = ['constructor',[
     ":TYPE",
-    ['param_list', [["required_param_list", ":PARAMS"],["optional_param_list", ":OPTIONAL_PARAMS"]]]
+    ['param_list', [Opt(["required_param_list", ":PARAMS"]),
+                    ["optional_param_list", ":OPTIONAL_PARAMS"]]]
     ]]
 
 class Constructor:
@@ -329,12 +332,13 @@ def make_member(completion_str):
     traceback.print_exc(file=sys.stdout)
     return None
 
-def test(str, expected):
-  print make_member(str).to_sexp_list()
+def test(input, expected):
+  s = str(make_member(input))
+  assert expected == s, "Expected: " + expected + ", found " + s
 
 if __name__ == "__main__":
   test("[#void#]insertRows(<#int row#>, <#const QList<QStandardItem *> &items#>)",
-       "void insertRows(int row, const QList<QStandardItem *>& items)")
+       "void insertRows(int row, QList<QStandardItem *> const & items)")
   test("[#void#]insertRows(<#int row#>, <#int count#>)",
        "void insertRows(int row, int count)")
   test("[#bool#]isDragEnabled()[# const#]",
@@ -344,18 +348,24 @@ if __name__ == "__main__":
   test("[#QScopedPointer<QStandardItemPrivate>#]d_ptr",
        "QScopedPointer<QStandardItemPrivate> d_ptr")
   test("[#QStandardItem &#]operator=(<#const QStandardItem &other#>)",
-       "QStandardItem& operator=(const QStandardItem& other)")
+       "QStandardItem & operator=(QStandardItem const & other)")
   test("[#bool#]operator<(<#const QStandardItem &other#>)[# const#]",
-       "bool operator<(const QStandardItem& other) const")
+       "bool operator<(QStandardItem const & other) const")
   test("[#QStandardItem *#]child(<#int row#>{#, <#int column#>#})[# const#]",
-       "QStandardItem* child(int row, int column) const")
+       "QStandardItem * child(int row[, int column]) const")
   test("ApeOutlineModel(<#const long long customerId#>{#, <#QObject *parent#>#})",
-       "ApeOutlineModel(const long long customerId, QObject* parent)")
+       "ApeOutlineModel(long long const customerId[, QObject * parent])")
   test("[#void#]selectionChangedSlot(<#const QItemSelection &#>, <#const QItemSelection &#>)",
-       "void selectionChangedSlot(const QItemSelection& x, const QItemSelection& x)")
+       "void selectionChangedSlot(QItemSelection const &, QItemSelection const &)")
   test("QMap<<#class Key#>, <#class T#>>(<#const QMap<Key, T> &other#>)",
-       "QMap<Key, T>(const QMap<Key, T> &other>)")
+       "QMap<Key, T>(QMap<Key, T> const & other)")
   test("QMap<<#class Key#>, <#class T#>>",
        "QMap<Key, T>")
   test("QMatrix(<#Qt::Initialization#>)",
        "QMatrix(Qt::Initialization)")
+  test("[#void#]setConnectOptions({#<#const QString &options#>#})",
+       "void setConnectOptions([, QString const & options])")
+  test("[#void#]~QSqlDatabase()",
+       "void ~QSqlDatabase()")
+
+  print "All tests passed."
