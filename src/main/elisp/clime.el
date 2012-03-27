@@ -1634,10 +1634,9 @@ versions cannot deal with that."
        (clime-rex (tag sexp)
 	   sexp
 	 ((:ok value)
-	  (unless (member tag clime-stack-eval-tags)
-	    (error "Reply to canceled synchronous eval request tag=%S sexp=%S"
-		   tag sexp))
-	  (throw tag (list #'identity value)))
+	  (if (not (member tag clime-stack-eval-tags))
+	    (message "Reply to canceled synchronous eval request tag=%S sexp=%S" tag sexp)
+	  (throw tag (list #'identity value))))
 	 ((:abort code reason)
 	  (throw tag (list #'error
 			   (format

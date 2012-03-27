@@ -34,7 +34,8 @@ def required_param_list(): return param,-1,(",", param)
 def param_list(): return 0,required_param_list,0,optional_param_list
 def field(): return ("[#",typedecl,"#]"),name
 def const_func_mod(): return "[#",const,"#]"
-def function(): return ("[#",typedecl,"#]"),function_name,"(",param_list,")",0,const_func_mod
+def scope(): return "[#",typename,"::","#]"
+def function(): return ("[#",typedecl,"#]"),0,scope,function_name,"(",param_list,")",0,const_func_mod
 def constructor(): return typename,"(",param_list,")"
 def member(): return [function,field,constructor,typename]
 
@@ -216,6 +217,7 @@ def param_section_str(params, opt_params):
 
 function_pat = ['function',[
     ":RETURN_TYPE",
+    Opt(["scope", ":SCOPE"]),
     ":FUNCTION_NAME", 
     ['param_list', [Opt(["required_param_list", ":PARAMS"]),
                     ["optional_param_list", ":OPTIONAL_PARAMS"]]],
@@ -299,7 +301,7 @@ class Constructor:
     return (self.type.name + "(" + param_section_str(self.params, self.opt_params)) + ")"
 
   def args_placeholder(self):
-    return ", ".join([str(p) for p in self.params])
+    return param_section_str(self.params, self.opt_params)
 
   def is_callable(self):
     return True
@@ -365,7 +367,13 @@ if __name__ == "__main__":
        "QMatrix(Qt::Initialization)")
   test("[#void#]setConnectOptions({#<#const QString &options#>#})",
        "void setConnectOptions([, QString const & options])")
+
   test("[#void#]~QSqlDatabase()",
        "void ~QSqlDatabase()")
+
+  test("[#void#][#QAbstractItemView::#]setEditTriggers(<#EditTriggers triggers#>)",
+       "void setEditTriggers(EditTriggers triggers)")
+
+  test("[#void#][#QList<QString>::#]pop_front()","void pop_front()")
 
   print "All tests passed."

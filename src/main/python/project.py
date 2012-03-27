@@ -112,12 +112,17 @@ class ClangJob(Job):
 
   SEVERITY_MAP = {'error':'error','warning':'warn','note':'info','fatal error':'error'}
   RE_ITEM = re.compile("^(.+?):([0-9]+):([0-9]+): (error|warning|note|fatal error): (.+)$")
+
+
   def receive_syntax_checker_output(self, req, clang_output):
+    MAX_NOTES = 150
+    count = 0
     for line in clang_output:
       m = self.RE_ITEM.match(line)
       if m:
-        print line
-        sys.stdout.flush()
+        if count > MAX_NOTES:
+          break
+        count += 1
         filename = m.group(1)
         line = int(m.group(2))
         col = int(m.group(3))
