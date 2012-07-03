@@ -279,7 +279,7 @@ class RebuildPCHJob(ClangJob):
     cmd = None
     sys.stdout.flush()
     header = self.config['pch_file'][0:-4]
-    print "Rebuilding " + header
+    print "Rebuilding pch of " + header
     (out,err,status) = util.run_process_for_output_lines(
         self.clang_pch_base_cmd(
             [header],
@@ -401,12 +401,14 @@ class Project:
     self.config['completion_options'] = conf[':completion-options'] or []
     self.config['clang_cmd'] = conf[':clang-cmd'] or "clang"
 
-    pch = conf.get(':pch-file')
-    if pch and os.path.exists(pch):
-      print "Using PCH at " + pch
-      self.config['pch_file'] = pch
+    pch = conf.get(':pch-file') or ""
+    if pch:
+      pch_header = pch[0:-4]
+      if os.path.exists(pch_header):
+        print "Using PCH at " + pch
+        self.config['pch_file'] = pch
     else:
-      print "PCH file not found: ." + pch
+      print "PCH file not found: " + pch
     sys.stdout.flush()
 
     util.send_sexp(req,
