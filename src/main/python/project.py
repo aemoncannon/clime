@@ -27,7 +27,7 @@ class Job:
 
 
 class ClangJob(Job):
-  
+
   def __init__(self, req, call_id, config):
     Job.__init__(self, req, call_id)
     self.config = config
@@ -52,62 +52,61 @@ class ClangJob(Job):
       return []
 
   def clang_base_cmd(self, use_pch = False):
-    return ([self.config["clang_cmd"], "-cc1"] + 
+    return ([self.config["clang_cmd"], "-cc1"] +
             [ #"-fdiagnostics-print-source-range-info",
             "-fdiagnostics-parseable-fixits",
             "-fno-caret-diagnostics",
             "-fsyntax-only"
             ] +
             (self.pch_options() if use_pch else []) +
-            self.config['compile_options'] + 
-            self.config['compile_directives'] + 
-            ["-I" + inc for inc in self.config['compile_include_dirs']] + 
+            self.config['compile_options'] +
+            self.config['compile_directives'] +
+            ["-I" + inc for inc in self.config['compile_include_dirs']] +
             ["-include" + inc for inc in self.config['compile_include_headers']])
 
   def clang_completions_base_cmd(self, filename, line, col, use_pch = True):
-    return ([self.config["clang_cmd"], "-cc1"] + 
+    return ([self.config["clang_cmd"], "-cc1"] +
             ["-fsyntax-only",
              "-code-completion-at=" + filename + ":" + str(line) + ":" + str(col),
              "-code-completion-macros"
              ] +
             (self.pch_options() if use_pch else []) +
-            self.config['completion_options'] + 
-            self.config['compile_directives'] + 
-            ["-I" + inc for inc in self.config['compile_include_dirs']] + 
-            ["-include" + inc for inc in self.config['compile_include_headers']] + 
+            self.config['completion_options'] +
+            self.config['compile_directives'] +
+            ["-I" + inc for inc in self.config['compile_include_dirs']] +
+            ["-include" + inc for inc in self.config['compile_include_headers']] +
             [filename]
             )
 
   def clang_pch_base_cmd(self, headers, pch_file):
-    return ([self.config["clang_cmd"], "-cc1"] + 
+    return ([self.config["clang_cmd"], "-cc1"] +
             headers +
-            ['-emit-pch', '-o', pch_file] + 
-            self.config['compile_options'] + 
-            self.config['compile_directives'] + 
-            ["-I" + inc for inc in self.config['compile_include_dirs']] + 
+            ['-emit-pch', '-o', pch_file] +
+            self.config['compile_options'] +
+            self.config['compile_directives'] +
+            ["-I" + inc for inc in self.config['compile_include_dirs']] +
             ["-include" + inc for inc in self.config['compile_include_headers']]
             )
 
   def clang_tags_base_cmd(self, source_files):
-    return (["ctags", "-e", "-f", 
+    return (["ctags", "-e", "-f",
              self.config['root_dir'] + "/TAGS"] + source_files)
 
 
+  ANALYZER_CHECKERS = ["core",
+                       "experimental",
+                       "osx",
+                       "unix"]
+
   def analyzer_base_cmd(self):
-    return (["scan-build", 
-             "-analyze-headers", 
-             "--keep-going"] +
-            [self.config["clang_cmd"], "-cc1"] + 
-            ["--analyze", 
-             "-fdiagnostics-fixit-info", 
+    return ([self.config["clang_cmd"], "-cc1"] +
+            ["-analyze",
+             "-analyzer-checker", ",".join(self.ANALYZER_CHECKERS),
              "-fdiagnostics-parseable-fixits",
-             "-fno-caret-diagnostics",
-             "-fvisibility=default",
-             "-frtti", "-fno-exceptions", 
-             "-Wall"] +
+             "-fno-caret-diagnostics"] +
             self.config['analyzer_options'] +
-            self.config['compile_directives'] + 
-            ["-I" + inc for inc in self.config['compile_include_dirs']] + 
+            self.config['compile_directives'] +
+            ["-I" + inc for inc in self.config['compile_include_dirs']] +
             ["-include" + inc for inc in self.config['compile_include_headers']])
 
   SEVERITY_MAP = {'error':'error','warning':'warn','note':'info','fatal error':'error'}
@@ -130,7 +129,7 @@ class ClangJob(Job):
         msg = m.group(5)
         util.send_sexp(
             req,
-            [key(":notes"), 
+            [key(":notes"),
              [key(":notes"),
               [[key(":file"), filename,
                 key(":line"), line,
@@ -168,7 +167,7 @@ class ClangCompletionsJob(ClangJob):
       return self.run_command(False)
     else:
       return lines
-      
+
 
   def run(self):
     #    f = open(self.filename)
@@ -263,7 +262,41 @@ class ClangCompileFileJob(ClangJob):
       sys.stdout.flush()
     else:
       assert False, "WTF. Not header OR source unit?"
-      
+
+    clang_output = util.run_process(cmd)
+    self.receive_syntax_checker_output(self.req, clang_output)
+
+    util.send_sexp(self.req, util.return_ok(True, self.call_id))
+
+
+class AnalyzeFileJob(ClangJob):
+
+  def __init__(self, req, call_id, config, filename):
+    ClangJob.__init__(self, req, call_id, config)
+    self.filename = filename
+
+  def run(self):
+    cmd = None
+    sys.stdout.flush()
+
+    if util.is_unit(self.filename):
+      sys.stdout.flush()
+      cmd = self.analyzer_base_cmd() + [self.filename]
+      util.send_sexp(self.req, [key(":clear-file-notes"), [self.filename]])
+    elif util.is_header(self.filename):
+      sys.stdout.flush()
+      util.send_sexp(self.req,[key(":clear-all-notes"), True])
+
+      dg = depgraph.DepGraph(self.config['source_roots'],
+                             self.config['compile_include_dirs'])
+      invalidated = dg.files_including(self.filename)
+      units = [f for f in invalidated if util.is_unit(f)]
+
+      cmd = self.analyzer_base_cmd() + units + [self.filename]
+      sys.stdout.flush()
+    else:
+      assert False, "WTF. Not header OR source unit?"
+
     clang_output = util.run_process(cmd)
     self.receive_syntax_checker_output(self.req, clang_output)
 
@@ -304,12 +337,12 @@ class RebuildTagsJob(ClangJob):
     cmd = None
     print "Rebuilding TAGS file..."
 
-    source_files = ([f for f in self.all_units()] + 
+    source_files = ([f for f in self.all_units()] +
                     [f for f in self.all_project_headers()])
 
     (out,err,status) = util.run_process_for_output_lines(
         self.clang_tags_base_cmd(source_files))
-    
+
     print str(out)
     print str(err)
 
@@ -329,7 +362,7 @@ class ClangCompileAllJob(ClangJob):
     cmd = self.clang_base_cmd()
     for s in self.all_units():
       cmd.append(s)
-      
+
     clang_output = util.run_process(cmd)
 
     util.send_sexp(
@@ -366,7 +399,7 @@ class Project:
       util.send_sexp(job.req, util.return_ok(False, job.call_id))
 
   def handle_rpc_connection_info(self, rpc, req, call_id):
-    util.send_sexp(req, util.return_ok(                
+    util.send_sexp(req, util.return_ok(
     [key(":pid"),os.getpid(),
      key(":style"),False,
      key(":server-implementation"),[
@@ -390,7 +423,7 @@ class Project:
     conf = util.sexp_to_key_map(rpc[1])
     self.config['root_dir'] = os.path.abspath(conf[':root-dir'])
     self.config['source_roots'] = [
-        os.path.join(self.config['root_dir'],r) for r in 
+        os.path.join(self.config['root_dir'],r) for r in
         (conf[':source-roots'] or [])]
     self.config['project_name'] = "Unnamed Project"
     self.config['compile_options'] = conf[':compile-options'] or []
@@ -433,7 +466,7 @@ class Project:
 
   def handle_rpc_analyze_file(self, rpc, req, call_id):
     filename = rpc[1]
-    self.clang_analyze_file(req, filename, call_id)
+    self.start_job(AnalyzeFileJob(req, call_id, self.config, filename))
 
   def handle_rpc_analyze_all(self, rpc, req, call_id):
     self.clang_analyze_all(req, call_id)
